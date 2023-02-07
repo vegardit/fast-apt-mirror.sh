@@ -193,12 +193,13 @@ function find_fast_mirror() {
 
   if [[ -n $current_mirror ]]; then
     if [[ ${exclude_current:-} == "true" ]]; then
-       mirrors=$(echo "$mirrors" | grep -v "$current_mirror")
-    elif [[ $mirrors == *"current_mirror"* ]]; then
-      mirrors="$current_mirror"$'\n'"$mirrors"
+      mirrors=$(echo "$mirrors" | grep -v "$current_mirror" | shuf -n $((max_random_mirrors)))
+    elif [[ $mirrors != *"current_mirror"* ]]; then
+      mirrors="$current_mirror"$'\n'"$(echo "$mirrors" | shuf -n $((max_random_mirrors)))"
     fi
+  else
+    mirrors=$(echo "$mirrors" | shuf -n $((max_random_mirrors)))
   fi
-  mirrors=$(echo "$mirrors" | shuf -n $((max_random_mirrors)))
 
   >&2 echo "done"
   if [[ ${verbosity:-} -gt 1 ]]; then
