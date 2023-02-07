@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: © Vegard IT GmbH (https://vegardit.com) and contributors
+# SPDX-FileContributor: Sebastian Thomschke, Vegard IT GmbH
+# SPDX-License-Identifier: Apache-2.0
+#
+# https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions
+name: Build
+
+on:
+  push:
+    branches:
+    - '**'
+    tags-ignore:
+    - '**'
+    paths-ignore:
+    - '**/*.md'
+    - '.github/*.yml'
+    - '.semaphore/**/*'
+  pull_request:
+  workflow_dispatch:
+    # https://github.blog/changelog/2020-07-06-github-actions-manual-triggers-with-workflow_dispatch/
+    inputs:
+      debug-with-ssh:
+        description: "Start an SSH server for debugging purposes after test runs:"
+        default: never
+        type: choice
+        options:
+        - always
+        - on_failure
+        - on_failure_or_cancelled
+        - never
+      debug-with-ssh-only-for-actor:
+        description: "Limit access to the SSH server to the GitHub user that triggered the job."
+        default: true
+        type: boolean
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - ubuntu-22.04
+        - ubuntu-20.04
+        - windows-latest
+
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v3 #https://github.com/actions/checkout
+
+    - name: Install shellcheck
+      if: runner.os == 'Linux'
+      run: |
+        pushd $HOME
+        if ! -f shellcheck; then
+          wget -qO- "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJ --strip-components=1
+          shellcheck -V
+        fi
+
+    - name: Testing with shellcheck
+      if: runner.os == 'Linux'
+      run: |
+        set -e
+        for file in $(find . -name '*.sh' -type f); do
+          echo "Checking $file..." 
+          $HOME/shellcheck -s bash "$file"
+        done
+
+    - name: Test
+      timeout-minutes: 5
+      run: |
+        bash tests/run-tests.sh
+
+    - name: "SSH session for debugging"
+      uses: mxschmitt/action-tmate@v3
+      if: ${{ (inputs.debug-with-ssh == 'always' && always()) || (inputs.debug-with-ssh == 'on_failure' && failure()) || (inputs.debug-with-ssh == 'on_failure_or_cancelled' && (failure() || cancelled())) }}
+      with:
+        limit-access-to-actor: ${{ inputs.debug-with-ssh-only-for-actor }}

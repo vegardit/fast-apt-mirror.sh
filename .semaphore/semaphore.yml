@@ -1,0 +1,38 @@
+# https://docs.semaphoreci.com/reference/pipeline-yaml-reference/
+version: v1.0
+
+name: fast-apt-mirror.sh
+
+# See https://docs.semaphoreci.com/ci-cd-environment/machine-types/
+# and https://docs.semaphoreci.com/ci-cd-environment/ubuntu-18.04-image/
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+
+blocks:
+- name: "Run shellcheck"
+  task:
+    prologue:
+      commands:
+      # install latest shellcheck release
+      - wget -qO- "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJ -C $HOME --strip-components=1
+      - $HOME/shellcheck -V
+    jobs:
+    - name: "Run shellcheck"
+      commands:
+      - checkout
+      - |
+        set -e
+        for file in $(find . -name '*.sh' -type f); do
+          echo "Checking $file..." 
+          $HOME/shellcheck -s bash "$file"
+        done
+
+- name: "Run tests"
+  task:
+    jobs:
+    - name: "Run Tests"
+      commands:
+      - checkout
+      - bash tests/run-tests.sh
