@@ -15,19 +15,18 @@ blocks:
   task:
     prologue:
       commands:
-      # install latest shellcheck release
-      - wget -qO- "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJ -C $HOME --strip-components=1
-      - $HOME/shellcheck -V
+      - checkout
     jobs:
     - name: "Run shellcheck"
       commands:
-      - checkout
       - bash tests/run-shellcheck.sh
 
 - name: "Run tests"
   task:
+    prologue:
+      commands:
+      - checkout
     jobs:
     - name: "Run Tests"
       commands:
-      - checkout
       - bash tests/run-tests.sh
