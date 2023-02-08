@@ -61,6 +61,14 @@ function __xargs() {
   env -i HOME="$HOME" LC_CTYPE="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" PATH="$PATH" TERM="${TERM:-}" USER="${USER:-}" xargs "$@"
 }
 
+function __sudo() {
+  if [[ "$EUID" -eq 0 ]]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
 function get_dist_name() {
   if compgen -G "/etc/*-release" >/dev/null; then
     cat /etc/*-release | grep "^ID=" | cut -d= -f2
@@ -313,10 +321,10 @@ function set_mirror() {
   else
     local backup=/etc/apt/sources.list.bak.$(date +'%Y%m%d_%H%M%S')
     echo "Creating backup $backup"
-    sudo cp /etc/apt/sources.list "$backup"
+    __sudo cp /etc/apt/sources.list "$backup"
     echo "Changing mirror from [$current_mirror] to [$new_mirror]..."
-    sudo sed -i "s|$current_mirror|$new_mirror|g" /etc/apt/sources.list
-    sudo apt-get update
+    __sudo sed -i "s|$current_mirror|$new_mirror|g" /etc/apt/sources.list
+    __sudo apt-get update
   fi
 }
 
