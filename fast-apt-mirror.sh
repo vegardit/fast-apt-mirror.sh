@@ -225,7 +225,7 @@ function find_fast_mirror() {
   # shellcheck disable=SC2016 # Expressions don't expand in single quotes, use double quotes for that
   local mirrors_with_updatetimes=$(echo "$mirrors" | \
     __xargs -i -P "$(echo "$mirrors" | wc -l)" bash -c \
-       'last_modified=$(set -o pipefail; curl --max-time 3 -sSf --head "{}'"${last_modified_path}"'" &>/dev/null | grep "Last-Modified" | cut -d" " -f2- | LANG=C date -f- -u +%s || echo 0); echo "$last_modified {}"; >&2 echo -n "."'
+       'last_modified=$(set -o pipefail; curl --max-time 3 -sSf --head "{}'"${last_modified_path}"'" | grep -i "last-modified" | cut -d" " -f2- | LANG=C date -f- -u +%s || echo 0); echo "$last_modified {}"; >&2 echo -n "."'
   )
   >&2 echo "done"
   newest_mirrors=$(echo "$mirrors_with_updatetimes" | sort -rg | awk '{ if (NR==1) TS=$1; if ($1==TS) print $2; }')
