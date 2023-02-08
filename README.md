@@ -25,13 +25,19 @@
 It was born out of the ongoing stability [issues](https://github.com/actions/runner-images/issues?q=is%3Aissue+azure.archive.ubuntu.com)) with the `azure.archive.ubuntu.com` Ubuntu
 mirror pre-configured in Github Actions runners.
 
+
 ## <a name="installation"></a>Installation
 
 For example:
-```
+```bash
+# install pre-reqs: bash, curl and HTTPS transport support for apt
+$ sudo apt-get install -y bash curl apt-transport-https ca-certificates
+
+# install fast-apt-mirror.sh under /usr/local/bin/ to make it automatically available via $PATH
 $ sudo curl https://raw.githubusercontent.com/vegardit/fast-apt-mirror.sh/v1/fast-apt-mirror.sh -o /usr/local/bin/fast-apt-mirror.sh
 $ sudo chmod 755 /usr/local/bin/fast-apt-mirror.sh
 ```
+
 
 ## <a name="usage"></a>Usage
 
@@ -146,6 +152,7 @@ Fetched 26.9 MB in 5s (4211 kB/s)
 Reading package lists... Done
 ```
 
+
 ## <a name="alternatives"></a>Alternatives
 
 Here is a list of possible alternative which didn't work for us for one reason or another:
@@ -155,6 +162,7 @@ Here is a list of possible alternative which didn't work for us for one reason o
 - https://github.com/martin68/apt-smart (Python based, last commit 05/2020)
 - https://github.com/scanepa/apt-spy  (C based, last commit 01/2012)
 - https://github.com/xolox/python-apt-mirror-updater (Python based, last commit 09/2021)
+
 
 ## <a name="license"></a>License
 
