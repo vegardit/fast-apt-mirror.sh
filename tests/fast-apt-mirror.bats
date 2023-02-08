@@ -101,7 +101,7 @@ function get_dist_name() {
     debian|ubuntu) ;;
     *) skip ;;
   esac
-  assert_exitcode $RC_OK find --apply --exclude-current
+  assert_exitcode $RC_OK find -vvv --apply --exclude-current
   assert_regex "$output" 'Creating backup /etc/apt/sources.list.bak'
   assert_regex "$output" "Changing mirror from \[.*\] to \[.*\]"
   assert_regex "$output" "Reading package lists..."

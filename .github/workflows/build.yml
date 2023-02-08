@@ -39,7 +39,7 @@ defaults:
 
 jobs:
 
-  build:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -56,7 +56,7 @@ jobs:
     - name: Run shellcheck
       run: bash tests/run-shellcheck.sh
 
-    - name: Test
+    - name: Run tests
       timeout-minutes: 5
       run: bash tests/run-tests.sh
 
@@ -65,3 +65,27 @@ jobs:
       if: ${{ (inputs.debug-with-ssh == 'always' && always()) || (inputs.debug-with-ssh == 'on_failure' && failure()) || (inputs.debug-with-ssh == 'on_failure_or_cancelled' && (failure() || cancelled())) }}
       with:
         limit-access-to-actor: ${{ inputs.debug-with-ssh-only-for-actor }}
+
+  test-containers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+        - debian:stable-slim
+        - debian:buster-slim
+        - debian:bullseye-slim
+        - debian:stretch-slim
+        - ubuntu:latest
+        - ubuntu:22.04
+        - ubuntu:20.04
+        - ubuntu:18.04
+        - ubuntu:16.04
+
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v3 #https://github.com/actions/checkout
+
+    - name: Run tests in [${{ matrix.image }}]
+      timeout-minutes: 5
+      run: bash tests/run-tests-in-docker.sh ${{ matrix.image }}
