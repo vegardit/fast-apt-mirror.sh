@@ -160,7 +160,7 @@ Here is a list of possible alternative which didn't work for us for one reason o
 - https://github.com/jblakeman/apt-select (Python based, last commit 11/2019)
 - https://github.com/lagged/apt-spy2 (Ruby based, last commit 05/2020)
 - https://github.com/martin68/apt-smart (Python based, last commit 05/2020)
-- https://github.com/scanepa/apt-spy  (C based, last commit 01/2012)
+- https://github.com/scanepa/apt-spy (C based, last commit 01/2012)
 - https://github.com/xolox/python-apt-mirror-updater (Python based, last commit 09/2021)
 
 
