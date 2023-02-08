@@ -201,9 +201,11 @@ function find_fast_mirror() {
 
   if [[ -n $current_mirror ]]; then
     if [[ ${exclude_current:-} == "true" ]]; then
+      # exclude current mirror from consideration
       mirrors=$(echo "$mirrors" | grep -v "$current_mirror" | shuf -n $((max_healthchecks)))
     elif [[ $mirrors != *"current_mirror"* ]]; then
-      mirrors="$current_mirror"$'\n'"$(echo "$mirrors" | shuf -n $((max_healthchecks)))"
+      # include current mirror into consideration even if not in remote mirror list
+      mirrors="$current_mirror"$'\n'"$(echo "$mirrors" | shuf -n $((max_healthchecks - 1)))"
     fi
   else
     mirrors=$(echo "$mirrors" | shuf -n $((max_healthchecks)))
@@ -211,36 +213,48 @@ function find_fast_mirror() {
 
   >&2 echo "done"
   if [[ ${verbosity:-} -gt 1 ]]; then
-    for mirror in $mirrors; do  >&2 echo " -> $mirror"; done
+    for mirror in $mirrors; do >&2 echo " -> $mirror"; done
   fi
 
   #
-  # filter out inaccessible or outdated mirrors
+  # checking reachability and sync status of mirrors
   #
-  >&2 echo -n "Checking sync status of $(echo "$mirrors" | wc -l) mirrors"
+  >&2 echo -n "Checking health status of $(echo "$mirrors" | wc -l) mirrors"
   # returns a list with content like:
   # 1675322068 http://archive.ubuntu.com/ubuntu/
   # 1675322068 http://ftp.halifax.rwth-aachen.de/ubuntu/
   #
   # shellcheck disable=SC2016 # Expressions don't expand in single quotes, use double quotes for that
-  local mirrors_with_updatetimes=$(echo "$mirrors" | \
+  local healthcheck_results=$(echo "$mirrors" | \
     __xargs -i -P "$(echo "$mirrors" | wc -l)" bash -c \
-       'last_modified=$(set -o pipefail; curl --max-time 3 -sSf --head "{}'"${last_modified_path}"'" | grep -i "last-modified" | cut -d" " -f2- | LANG=C date -f- -u +%s || echo 0); echo "$last_modified {}"; >&2 echo -n "."'
+       'last_modified=$(set -o pipefail; curl --max-time 3 -sSf --head "{}'"${last_modified_path}"'" 2>/dev/null | grep -i "last-modified" | cut -d" " -f2- | LANG=C date -f- -u +%s || echo 0); echo "$last_modified {}"; >&2 echo -n "."'
   )
   >&2 echo "done"
-  newest_mirrors=$(echo "$mirrors_with_updatetimes" | sort -rg | awk '{ if (NR==1) TS=$1; if ($1==TS) print $2; }')
+
+  #
+  # filter out broken and outdated mirrors
+  #
+  healthy_mirrors=$(echo "$healthcheck_results" | sort -rg | awk '{ if (NR==1) TS=$1; if ($1==TS) print $2; }')
   if [[ ${verbosity:-} -gt 1 ]]; then
-    for mirror in $mirrors; do  >&2 echo " -> $mirror UP-TO-DATE"; done
+    for mirror in $mirrors; do >&2 echo " -> $mirror UP-TO-DATE"; done
   fi
-  >&2 echo " -> $(echo "$newest_mirrors" | wc -l) mirrors are reachable and up-to-date"
+  >&2 echo " -> $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
+
+  #
+  # select mirrors for the speed test
+  #
+  if [[ -n $current_mirror && ${exclude_current:-} != "true" ]]; then
+    speedtest_mirrors=$(echo "$current_mirror"$'\n'"$healthy_mirrors" | uniq -u | head -n $((max_speedtests)))
+  else
+    speedtest_mirrors=$(echo "$healthy_mirrors" | head -n $((max_speedtests)))
+  fi
 
   #
   # test download speed and select fastest mirror
   #
-  >&2 echo -n "Speed testing $max_speedtests of the available $(echo "$newest_mirrors" | wc -l) mirrors (sample download size: $((sample_size_kb))KB)"
+  >&2 echo -n "Speed testing $(echo "$speedtest_mirrors" | wc -l) of the available $(echo "$healthy_mirrors" | wc -l) mirrors (sample download size: $((sample_size_kb))KB)"
   mirrors_with_speed=$(
-    echo "$newest_mirrors" \
-    | head -n $((max_speedtests)) \
+    echo "$speedtest_mirrors" \
     | __xargs -P $((download_parallel)) -i bash -c \
              "curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sSf -w '%{speed_download} {}\n' -o /dev/null {}ls-lR.gz 2>/dev/null || true; >&2 echo -n '.'" \
     | sort -rg
