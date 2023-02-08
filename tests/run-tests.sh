@@ -17,7 +17,7 @@ if [[ ! -d ~/bats/assert ]]; then
   git clone --depth=1 --single-branch https://github.com/bats-core/bats-assert.git ~/bats/assert
 fi
 
-for test_file in $(command ls "${0%/*}"/*.bats); do
+for test_file in "${0%/*}"/*.bats; do
   echo "#####################################"
   echo "# Testing [$test_file]..."
   echo "#####################################"

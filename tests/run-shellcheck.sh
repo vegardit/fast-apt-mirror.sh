@@ -46,7 +46,7 @@ export PATH="$HOME/shellcheck:$PATH"
 
 shellcheck -V
 
-cd "$(dirname "$0")/.."
+cd "${0%/*}/.."
 find . -name '*.sh' -type f -print0 | while IFS= read -r -d '' file; do
   echo "Checking $file..."
   shellcheck -s bash "$file"
