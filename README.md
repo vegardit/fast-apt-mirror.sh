@@ -20,9 +20,9 @@
 
 ## <a name="what-is-it"></a>What is it?
 
-**fast-apt-mirror.sh** is a self-containing Bash script that helps you easily and quickly determine and configure a fast APT mirror on Debian and Ubuntu systems.
+**fast-apt-mirror.sh** is a self-contained Bash script that helps you easily and quickly determine and configure a fast APT mirror on Debian and Ubuntu systems.
 
-It was born out of the ongoing stability [issues](https://github.com/actions/runner-images/issues?q=is%3Aissue+azure.archive.ubuntu.com)) with the `azure.archive.ubuntu.com` Ubuntu
+It was born out of the ongoing stability [issues](https://github.com/actions/runner-images/issues?q=is%3Aissue+azure.archive.ubuntu.com) with the `azure.archive.ubuntu.com` Ubuntu
 mirror pre-configured in Github Actions runners.
 
 
@@ -156,12 +156,13 @@ Reading package lists... Done
 ## <a name="alternatives"></a>Alternatives
 
 Here is a list of possible alternative which didn't work for us for one reason or another:
-- https://github.com/hychen/getfastmirror (Python based, last commit 07/2010)
-- https://github.com/jblakeman/apt-select (Python based, last commit 11/2019)
-- https://github.com/lagged/apt-spy2 (Ruby based, last commit 05/2020)
-- https://github.com/martin68/apt-smart (Python based, last commit 05/2020)
-- https://github.com/scanepa/apt-spy (C based, last commit 01/2012)
-- https://github.com/xolox/python-apt-mirror-updater (Python based, last commit 09/2021)
+- **apt-select** https://github.com/jblakeman/apt-select (Python based, last commit 11/2019)
+- **apt-smart** https://github.com/martin68/apt-smart (Python based, last commit 05/2020)
+- **apt-spy** https://github.com/scanepa/apt-spy (C based, last commit 01/2012)
+- **apt-spy2** https://github.com/lagged/apt-spy2 (Ruby based, last commit 05/2020)
+- **getfastmirror** https://github.com/hychen/getfastmirror (Python based, last commit 07/2010)
+- **python-apt-mirror-updater** https://github.com/xolox/python-apt-mirror-updater (Python based, last commit 09/2021)
+- **netselect-apt** https://github.com/apenwarr/netselect/blob/master/netselect-apt (Bash based, 10/2010, [Limitations](https://manpages.debian.org/bullseye/netselect-apt/netselect-apt.1.en.html#LIMITATIONS))
 
 
 ## <a name="license"></a>License

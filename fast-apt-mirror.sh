@@ -3,6 +3,8 @@
 # SPDX-FileContributor: Sebastian Thomschke, Vegard IT GmbH
 # SPDX-License-Identifier: Apache-2.0
 #
+# https://github.com/vegardit/fast-apt-mirror.sh/
+#
 # shellcheck disable=SC2155 # (warning): Declare and assign separately to avoid masking return values
 
 ###################

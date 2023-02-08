@@ -3,7 +3,7 @@
 # SPDX-FileContributor: Sebastian Thomschke, Vegard IT GmbH
 # SPDX-License-Identifier: Apache-2.0
 #
-# BATS Tests (https://github.com/bats-core/bats-core) of await-http.sh script
+# BATS Tests (https://github.com/bats-core/bats-core) of fast-apt-mirror.sh script
 #
 
 function setup() {
