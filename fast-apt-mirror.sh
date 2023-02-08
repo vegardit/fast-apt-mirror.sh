@@ -132,8 +132,8 @@ function find_fast_mirror() {
       --apply)                    local apply=true ;;
       --exclude-current)          local exclude_current=true ;;
       -p|--parallel)       shift; local download_parallel=$1 ;;
-      -m|--random-mirrors) shift; local max_random_mirrors=$1 ;;
-      -t|--speed-tests)    shift; local max_speedtests=$1 ;;
+      --healthchecks)      shift; local max_healthchecks=$1 ;;
+      --speedtests)        shift; local max_speedtests=$1 ;;
       --sample-size)       shift; local sample_size_kb=$1 ;;
       --sample-time)       shift; local sample_time_secs=$1 ;;
       --verbose)                  local verbosity=$(( ${verbosity:-0} + 1 )) ;;
@@ -144,14 +144,14 @@ function find_fast_mirror() {
         echo "$DESC_FIND"
         echo
         echo "Options:"
-        echo "     --apply                - Replaces the current APT mirror in /etc/apt/sources.list with a fast mirror and runs 'sudo apt-get update'"
-        echo "     --exclude-current      - If specified, don't include the current APT mirror in the speed tests."
-        echo " -p, --parallel COUNT       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster."
-        echo " -m, --random-mirrors COUNT - Number of random mirrors to select from the Ubuntu/Debian mirror list site to test for availability and up-to-dateness - default is 20"
-        echo " -t  --speed-tests COUNT    - Maximum number of mirrors to test for speed (out of the mirrors found to be available and up-to-date) - default is 5"
-        echo "     --sample-size KB       - Number of kilobytes to download during the speed from each mirror - default is 200KB"
-        echo "     --sample-time SECS     - Maximum number of seconds within the sample download from a mirror must finish - default is 3"
-        echo " -v, --verbose              - More output. Specify multiple times to increase verbosity."
+        echo "     --apply            - Replaces the current APT mirror in /etc/apt/sources.list with a fast mirror and runs 'sudo apt-get update'"
+        echo "     --exclude-current  - If specified, don't include the current APT mirror in the speed tests."
+        echo " -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster."
+        echo "     --healthchecks N   - Number of mirrors from the Ubuntu/Debian mirror lists to check for availability and up-to-dateness - default is 20"
+        echo "     --speedtests N     - Maximum number of healthy mirrors to test for speed - default is 5"
+        echo "     --sample-size KB   - Number of kilobytes to download during the speed from each mirror - default is 200KB"
+        echo "     --sample-time SECS - Maximum number of seconds within the sample download from a mirror must finish - default is 3"
+        echo " -v, --verbose          - More output. Specify multiple times to increase verbosity."
         return ;;
     esac
     shift
@@ -161,7 +161,7 @@ function find_fast_mirror() {
   local max_speedtests=${max_speedtests:-5}
   local sample_size_kb=${sample_size_kb:-200}
   local sample_time_secs=${sample_time_secs:-3}
-  local max_random_mirrors=${max_random_mirrors:-20}
+  local max_healthchecks=${max_healthchecks:-20}
   local verbosity=${verbosity:-0}
 
   dist_name=$(get_dist_name)
@@ -187,7 +187,7 @@ function find_fast_mirror() {
   #
   # select mirror candidates
   #
-  >&2 echo -n "Randomly selecting $((max_random_mirrors)) mirrors..."
+  >&2 echo -n "Randomly selecting $((max_healthchecks)) mirrors..."
   case $dist_name in
     debian)
       local mirrors=$(curl -s https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/' | sort -u)
@@ -201,12 +201,12 @@ function find_fast_mirror() {
 
   if [[ -n $current_mirror ]]; then
     if [[ ${exclude_current:-} == "true" ]]; then
-      mirrors=$(echo "$mirrors" | grep -v "$current_mirror" | shuf -n $((max_random_mirrors)))
+      mirrors=$(echo "$mirrors" | grep -v "$current_mirror" | shuf -n $((max_healthchecks)))
     elif [[ $mirrors != *"current_mirror"* ]]; then
-      mirrors="$current_mirror"$'\n'"$(echo "$mirrors" | shuf -n $((max_random_mirrors)))"
+      mirrors="$current_mirror"$'\n'"$(echo "$mirrors" | shuf -n $((max_healthchecks)))"
     fi
   else
-    mirrors=$(echo "$mirrors" | shuf -n $((max_random_mirrors)))
+    mirrors=$(echo "$mirrors" | shuf -n $((max_healthchecks)))
   fi
 
   >&2 echo "done"

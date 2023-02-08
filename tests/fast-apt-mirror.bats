@@ -88,7 +88,7 @@ function get_dist_name() {
 }
 
 @test "find: Find mirror if executed with arguments" {
-  assert_exitcode $RC_OK find --sample-size 10 --random-mirrors 8 --speed-tests 2
+  assert_exitcode $RC_OK find --sample-size 10 --healthchecks 8 --speedtests 2
   assert_regex "$output" 'Randomly selecting 8 mirrors...done'
   assert_regex "$output" 'Speed testing 2 of the available'
   assert_regex "$output" '(sample download size: 10KB)'

@@ -77,14 +77,14 @@ Usage:
 fast-apt-mirror.sh find [OPTION]...
 
 Options:
-     --apply                - Replaces the current APT mirror in /etc/apt/sources.list with a fast mirror and runs 'sudo apt-get update'
-     --exclude-current      - If specified, don't include the current APT mirror in the speed tests.
- -p, --parallel COUNT       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster.
- -m, --random-mirrors COUNT - Number of random mirrors to select from the Ubuntu/Debian mirror list site to test for availability and up-to-dateness - default is 20
- -t  --speed-tests COUNT    - Maximum number of mirrors to test for speed (out of the mirrors found to be available and up-to-date) - default is 5
-     --sample-size KB       - Number of kilobytes to download during the speed from each mirror - default is 200KB
-     --sample-time SECS     - Maximum number of seconds within the sample download from a mirror must finish - default is 3
- -v, --verbose              - More output. Specify multiple times to increase verbosity.
+     --apply            - Replaces the current APT mirror in /etc/apt/sources.list with a fast mirror and runs 'sudo apt-get update'
+     --exclude-current  - If specified, don't include the current APT mirror in the speed tests.
+ -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster.
+     --healthchecks N   - Number of mirrors from the Ubuntu/Debian mirror lists to check for availability and up-to-dateness - default is 20
+     --speedtests N     - Maximum number of healthy mirrors to test for speed - default is 5
+     --sample-size KB   - Number of kilobytes to download during the speed from each mirror - default is 200KB
+     --sample-time SECS - Maximum number of seconds within the sample download from a mirror must finish - default is 3
+ -v, --verbose          - More output. Specify multiple times to increase verbosity.
 ```
 
 Finding a fast mirror:
