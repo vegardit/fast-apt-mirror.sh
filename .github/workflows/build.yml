@@ -53,28 +53,12 @@ jobs:
     - name: Git Checkout
       uses: actions/checkout@v3 #https://github.com/actions/checkout
 
-    - name: Install shellcheck
-      if: runner.os == 'Linux'
-      run: |
-        pushd $HOME
-        if ! -f shellcheck; then
-          wget -qO- "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJ --strip-components=1
-          shellcheck -V
-        fi
-
-    - name: Testing with shellcheck
-      if: runner.os == 'Linux'
-      run: |
-        set -e
-        for file in $(find . -name '*.sh' -type f); do
-          echo "Checking $file..." 
-          $HOME/shellcheck -s bash "$file"
-        done
+    - name: Run shellcheck
+      run: bash tests/run-shellcheck.sh
 
     - name: Test
       timeout-minutes: 5
-      run: |
-        bash tests/run-tests.sh
+      run: bash tests/run-tests.sh
 
     - name: "SSH session for debugging"
       uses: mxschmitt/action-tmate@v3

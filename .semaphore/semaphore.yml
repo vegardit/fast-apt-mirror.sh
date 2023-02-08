@@ -22,12 +22,7 @@ blocks:
     - name: "Run shellcheck"
       commands:
       - checkout
-      - |
-        set -e
-        for file in $(find . -name '*.sh' -type f); do
-          echo "Checking $file..." 
-          $HOME/shellcheck -s bash "$file"
-        done
+      - bash tests/run-shellcheck.sh
 
 - name: "Run tests"
   task:
