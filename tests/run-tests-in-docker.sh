@@ -20,7 +20,6 @@ for image in "${@:-debian:stable-slim}"; do
   echo "##############################"
   docker run --rm \
     -v "$project_dir:/mnt/workspace:ro" \
-    -w /mnt/workspace \
     "$image" \
     bash -c "
     echo '::group::Install pre-reqs' &&

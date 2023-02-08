@@ -56,9 +56,19 @@ jobs:
     - name: Run shellcheck
       run: bash tests/run-shellcheck.sh
 
+    - name: Install bashcov
+      if: ${{ runner.os == 'Linux' }}
+      run: sudo gem install bashcov simplecov-console
+
     - name: Run tests
       timeout-minutes: 5
-      run: bash tests/run-tests.sh
+      run: |
+        set -eu
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          bashcov --skip-uncovered tests/run-tests.sh
+        else
+          bash tests/run-tests.sh
+        fi
 
     - name: "SSH session for debugging"
       uses: mxschmitt/action-tmate@v3
