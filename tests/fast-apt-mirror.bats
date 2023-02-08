@@ -120,7 +120,7 @@ function get_dist_name() {
 
 @test "set: Show error if executed with no URL" {
   assert_exitcode $RC_INVALID_ARGS set
-  assert_regex '^ERROR: Cannot set APT mirror: MIRROR_URL not specified!'
+  assert_regex "$output" '^ERROR: Cannot set APT mirror: MIRROR_URL not specified!'
 }
 
 @test "set: Show error if executed with malformed URL" {
