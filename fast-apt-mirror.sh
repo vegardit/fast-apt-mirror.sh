@@ -323,7 +323,7 @@ function set_mirror() {
     echo "Creating backup $backup"
     __sudo cp /etc/apt/sources.list "$backup"
     echo "Changing mirror from [$current_mirror] to [$new_mirror]..."
-    __sudo sed -i "s|$current_mirror|$new_mirror|g" /etc/apt/sources.list
+    __sudo sed -i "s|$current_mirror |$new_mirror |g" /etc/apt/sources.list
     __sudo apt-get update
   fi
 }
