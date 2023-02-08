@@ -251,12 +251,12 @@ function find_fast_mirror() {
     return $RC_MISC_ERROR
   fi
   fastest_mirror=$(echo "$mirrors_with_speed" | head -1 | cut -d" " -f2)
-  fastest_mirror_speed=$(echo "$mirrors_with_speed" | head -1 | cut -d" " -f1)
-  fastest_mirror_speed=${fastest_mirror_speed%%.*} # remove trailing .000 that is reported by some curl versions
-  >&2 echo " -> $fastest_mirror ($((fastest_mirror_speed/1024)) KB/s) determined as fastest mirror within $(( $(date +%s) - start_at )) seconds"
+  fastest_mirror_speed=$(echo "$mirrors_with_speed" | head -1 | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
+  >&2 echo " -> $fastest_mirror ($fastest_mirror_speed) determined as fastest mirror within $(( $(date +%s) - start_at )) seconds"
   if [[ ${verbosity:-} -gt 0 ]]; then
     echo "$mirrors_with_speed" | tail -n +2 | while IFS= read -r mirror; do
-      >&2 echo " -> $(echo "$mirror" | cut -d" " -f2) ($(($(echo "$mirror" |cut -d" " -f1)/1024)) KB/s)"
+      mirror_speed=$(echo "$mirror" | head -1 | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
+      >&2 echo " -> $(echo "$mirror" | cut -d" " -f2) ($mirror_speed)"
     done
   fi
   if [[ ${apply:-} == "true" ]]; then
