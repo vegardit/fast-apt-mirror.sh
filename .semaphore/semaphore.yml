@@ -12,6 +12,8 @@ agent:
 
 blocks:
 - name: "Run shellcheck"
+  run:
+    when: "change_in('/', {exclude: ['/.github'], default_branch: 'v1'})"
   task:
     prologue:
       commands:
@@ -22,6 +24,8 @@ blocks:
       - bash tests/run-shellcheck.sh
 
 - name: "Run tests"
+  run:
+    when: "change_in('/', {exclude: ['/.github'], default_branch: 'v1'})"
   task:
     prologue:
       commands:

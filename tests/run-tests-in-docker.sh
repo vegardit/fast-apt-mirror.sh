@@ -26,9 +26,6 @@ for image in "${@:-debian:stable-slim}"; do
     apt-get update &&
     apt-get install bash curl apt-transport-https ca-certificates git -y &&
     echo '::endgroup::' &&
-    echo '::group::cat /etc/apt/sources.list' &&
-    (cat /etc/apt/sources.list || true) &&
-    echo '::endgroup::' &&
     cp -r /mnt/workspace ~/workspace &&
     cd ~/workspace &&
     bash tests/run-tests.sh

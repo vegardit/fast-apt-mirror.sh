@@ -20,7 +20,8 @@
 
 ## <a name="what-is-it"></a>What is it?
 
-**fast-apt-mirror.sh** is a self-contained Bash script that helps you easily and quickly determine and configure a fast APT mirror on Debian and Ubuntu systems.
+**fast-apt-mirror.sh** is a self-contained Bash script that helps you easily and quickly determine and configure a fast APT mirror
+on [Debian](https://www.debian.org/), [Ubuntu](https://ubuntu.com/), [Pop!_OS](https://pop.system76.com/) systems.
 
 It was born out of the ongoing stability [issues](https://github.com/actions/runner-images/issues?q=is%3Aissue+azure.archive.ubuntu.com) with the `azure.archive.ubuntu.com` Ubuntu
 mirror pre-configured in Github Actions runners.

@@ -61,8 +61,8 @@ function get_dist_name() {
     debian|ubuntu)
       assert_exitcode $RC_OK current
       assert_regex "$output" '(https?|ftp)://'
-      >&3 echo " -> ${lines[-1]}"
       refute_regex "$output" 'ERROR:'
+      >&3 echo "|-> ${lines[0]}"
       ;;
     *)
       assert_exitcode $RC_MISC_ERROR current
@@ -102,9 +102,11 @@ function get_dist_name() {
     *) skip ;;
   esac
   assert_exitcode $RC_OK find -vvv --apply --exclude-current
-  assert_regex "$output" 'Creating backup /etc/apt/sources.list.bak'
+  >&3 echo "|-> ${lines[-2]}"
+  assert_regex "$output" 'Creating backup /etc/apt/sources.*.save'
   assert_regex "$output" "Changing mirror from \[.*\] to \[.*\]"
   assert_regex "$output" "Reading package lists..."
+  assert_regex "$output" "Successfully changed mirror from \[.*\] to \[.*\]"
   refute_regex "$output" 'ERROR:'
 }
 
@@ -142,7 +144,8 @@ function get_dist_name() {
   $CANDIDATE set $mirror_url1
 
   assert_exitcode $RC_OK set $mirror_url2
-  assert_regex "$output" 'Creating backup /etc/apt/sources.list.bak'
+  >&3 echo "|-> ${lines[-1]}"
+  assert_regex "$output" 'Creating backup /etc/apt/sources.*.save'
   assert_regex "$output" "Changing mirror from \[.*\] to \[$mirror_url2\]"
   assert_regex "$output" "Get:[1-9]+ $mirror_url2"
   assert_regex "$output" "Reading package lists..."

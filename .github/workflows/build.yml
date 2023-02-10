@@ -20,18 +20,18 @@ on:
     # https://github.blog/changelog/2020-07-06-github-actions-manual-triggers-with-workflow_dispatch/
     inputs:
       debug-with-ssh:
-        description: "Start an SSH server for debugging purposes after test runs:"
+        description: "Start an SSH session for debugging purposes after tests finished:"
         default: never
         type: choice
-        options:
-        - always
-        - on_failure
-        - on_failure_or_cancelled
-        - never
+        options: [ always, on_failure, on_failure_or_cancelled, never ]
       debug-with-ssh-only-for-actor:
-        description: "Limit access to the SSH server to the GitHub user that triggered the job."
+        description: "Limit access to the SSH session to the GitHub user that triggered the job."
         default: true
         type: boolean
+      debug-with-ssh-only-jobs-matching:
+        description: "Only start an SSH session for jobs matching this regex pattern:"
+        default: ".*"
+        type: string
 
 defaults:
   run:
@@ -70,9 +70,28 @@ jobs:
           bash tests/run-tests.sh
         fi
 
-    - name: "SSH session for debugging"
-      uses: mxschmitt/action-tmate@v3
-      if: ${{ (inputs.debug-with-ssh == 'always' && always()) || (inputs.debug-with-ssh == 'on_failure' && failure()) || (inputs.debug-with-ssh == 'on_failure_or_cancelled' && (failure() || cancelled())) }}
+    - name: "SSH session for debugging: check"
+      id: debug_ssh_sesssion_check
+      if: always()
+      run: |
+        set -eu
+        job_filter_pattern="${{ inputs.debug-with-ssh-only-jobs-matching }}"
+        echo "job_filter: $job_filter_pattern"
+
+        job_info=$(echo "$GITHUB_JOB ${{ toJSON(matrix) }}" | tr -d '\n')
+        echo "job_info: $job_info"
+
+        if [[ "$job_info" =~ .*$job_filter_pattern.* ]] && case "${{ job.status }}" in
+           success)   [[ "${{ inputs.debug-with-ssh }}" == always ]] ;;
+           cancelled) [[ "${{ inputs.debug-with-ssh }}" == on_failure_or_cancelled ]] ;;
+           failure)   [[ "${{ inputs.debug-with-ssh }}" =~ on_failure.* ]] ;;
+        esac; then
+           echo "start_session=true" >>$GITHUB_OUTPUT;
+        fi
+
+    - name: "SSH session for debugging: start"
+      uses: mxschmitt/action-tmate@v3 # https://github.com/mxschmitt/action-tmate
+      if: always() && steps.debug_ssh_sesssion_check.outputs.start_session
       with:
         limit-access-to-actor: ${{ inputs.debug-with-ssh-only-for-actor }}
 
@@ -82,10 +101,14 @@ jobs:
       fail-fast: false
       matrix:
         image:
+        - debian:unstable-slim
+        - debian:testing-slim
         - debian:stable-slim
+        - debian:bookworm-slim
         - debian:buster-slim
         - debian:bullseye-slim
         - debian:stretch-slim
+        - ubuntu:devel
         - ubuntu:latest
         - ubuntu:22.04
         - ubuntu:20.04

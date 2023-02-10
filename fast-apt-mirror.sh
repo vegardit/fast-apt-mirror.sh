@@ -56,7 +56,7 @@ fi
 #################################################
 readonly DESC_CURRENT='Prints the currently configured APT mirror.'
 readonly DESC_FIND="Finds and prints the URL of a fast APT mirror and optionally applies it using the '$(basename "$0") set' command."
-readonly DESC_SET="Configures the given APT mirror in /etc/apt/sources.list and runs 'sudo apt-get update'."
+readonly DESC_SET="Configures the given APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) and runs 'sudo apt-get update'."
 
 # workaround to prevent: "xargs: environment is too large for exec" in some environments
 function __xargs() {
@@ -87,32 +87,74 @@ function get_dist_version_name() {
   fi
 }
 
+function matches() {
+  local text=$1 pattern=$2
+  [[ $text =~ $pattern ]]
+}
+
+function read_main_mirror_from_deb822_file() {
+  # https://repolib.readthedocs.io/en/latest/deb822-format.html
+  file=$1
+  [[ -f $file ]] || return 0
+  local line mirror_uri='' mirror_main=''
+  while IFS= read -r line; do
+    if [[ -z $line ]]; then mirror_uri=; mirror_main=; continue; fi
+    if matches "$line" 'URIs:\s+([^ ]+)'; then mirror_uri=${BASH_REMATCH[1]}; continue; fi
+    if matches "$line" 'Components:\s+.*(main)(\s+|$)'; then mirror_main=true; continue; fi
+    if [[ -n $mirror_uri && "$mirror_main" == "true" ]]; then
+      echo "$mirror_uri"
+      return
+    fi
+  done < "$file"
+}
+
+function read_main_mirror_from_sources_list_file() {
+  # https://repolib.readthedocs.io/en/latest/deb822-format.html
+  file=$1
+  if [[ -f "$file" ]]; then
+    grep -E "^deb\s+(https?|ftp)://.*\s+main" "$file" | head -1 | awk '{ print $2 }'
+  fi
+}
+
+
+############################
+# returns two lines:
+# 1. mirror URL
+# 2. config file where the mirror URL was defined
+############################
 function get_current_mirror() {
   >&2 echo -n "Current mirror: "
   dist_name=$(get_dist_name)
   case $dist_name in
-    debian|ubuntu)
+    debian|ubuntu|pop)
        ;;
     *) >&2 echo "unknown (Unsupported operating system: $dist_name)"
        return $RC_MISC_ERROR
        ;;
   esac
 
-  local current_mirror=
-  if [[ -f /etc/apt/sources.list ]]; then
-    current_mirror=$(grep -E "^deb\s+(https?|ftp)://.*\s+main" /etc/apt/sources.list | head -1 | awk '{ print $2 }')
+  local current_mirror_url='' current_mirror_config
+  case $dist_name in
+    debian)     current_mirror_config='/etc/apt/sources.list.d/debian.sources'; current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_config") ;;
+    ubuntu|pop) current_mirror_config='/etc/apt/sources.list.d/system.sources'; current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_config") ;;
+  esac
+
+  if [[ -z $current_mirror_url ]]; then
+    current_mirror_config=/etc/apt/sources.list
+    current_mirror_url=$(read_main_mirror_from_sources_list_file /etc/apt/sources.list)
   fi
 
-  if [[ -z $current_mirror ]]; then
+  if [[ -z $current_mirror_url ]]; then
     >&2 echo "unknown"
     return
   fi
 
-  >&2 echo "$current_mirror"
+  >&2 echo "$current_mirror_url ($current_mirror_config)"
 
   # if function is piped or output is caputured write the selected APT mirror to STDOUT
   if [[ -p /dev/stdout ]]; then
-    echo "$current_mirror"
+    echo "$current_mirror_url"
+    echo "$current_mirror_config"
   fi
 }
 
@@ -131,25 +173,25 @@ function find_fast_mirror() {
   #
   while [ $# -gt 0 ]; do
     case $1 in
-      --apply)                    local apply=true ;;
-      --exclude-current)          local exclude_current=true ;;
-      -p|--parallel)       shift; local download_parallel=$1 ;;
-      --healthchecks)      shift; local max_healthchecks=$1 ;;
-      --speedtests)        shift; local max_speedtests=$1 ;;
-      --sample-size)       shift; local sample_size_kb=$1 ;;
-      --sample-time)       shift; local sample_time_secs=$1 ;;
-      --verbose)                  local verbosity=$(( ${verbosity:-0} + 1 )) ;;
-      -+(v))                      local verbosity=$(( ${verbosity:-0} + ${#1} - 1 )) ;;
+      --apply)               local apply=true ;;
+      --exclude-current)     local exclude_current=true ;;
+      -p|--parallel)  shift; local download_parallel=$1 ;;
+      --healthchecks) shift; local max_healthchecks=$1 ;;
+      --speedtests)   shift; local max_speedtests=$1 ;;
+      --sample-size)  shift; local sample_size_kb=$1 ;;
+      --sample-time)  shift; local sample_time_secs=$1 ;;
+      --verbose)             local verbosity=$(( ${verbosity:-0} + 1 )) ;;
+      -+(v))                 local verbosity=$(( ${verbosity:-0} + ${#1} - 1 )) ;;
       --help)
         echo "Usage: $(basename "$0") find [OPTION]...";
         echo
         echo "$DESC_FIND"
         echo
         echo "Options:"
-        echo "     --apply            - Replaces the current APT mirror in /etc/apt/sources.list with a fast mirror and runs 'sudo apt-get update'"
+        echo "     --apply            - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'"
         echo "     --exclude-current  - If specified, don't include the current APT mirror in the speed tests."
         echo " -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster."
-        echo "     --healthchecks N   - Number of mirrors from the Ubuntu/Debian mirror lists to check for availability and up-to-dateness - default is 20"
+        echo "     --healthchecks N   - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20"
         echo "     --speedtests N     - Maximum number of healthy mirrors to test for speed - default is 5"
         echo "     --sample-size KB   - Number of kilobytes to download during the speed from each mirror - default is 200KB"
         echo "     --sample-time SECS - Maximum number of seconds within the sample download from a mirror must finish - default is 3"
@@ -168,7 +210,7 @@ function find_fast_mirror() {
 
   dist_name=$(get_dist_name)
   case $dist_name in
-    debian|ubuntu)
+    debian|ubuntu|pop)
        local dist_version_name=$(get_dist_version_name)
        local dist_arch=$(dpkg --print-architecture)
        ;;
@@ -184,35 +226,49 @@ function find_fast_mirror() {
   #
   # determine the current APT mirror
   #
-  local current_mirror=$(get_current_mirror || true)
+  local current_mirror=$(get_current_mirror | head -n 1 || true)
 
   #
-  # select mirror candidates
+  # download mirror lists
   #
   >&2 echo -n "Randomly selecting $((max_healthchecks)) mirrors..."
+  local preferred_mirrors=()
   case $dist_name in
     debian)
-      local mirrors=$(curl -s https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/' | sort -u)
+      # see https://deb.debian.org/
+      preferred_mirrors+=("$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}")")
+      local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/' | sort -u)
       local last_modified_path="/dists/${dist_version_name}-updates/main/Contents-${dist_arch}.gz"
       ;;
-    ubuntu)
-      local mirrors=$(curl -s http://mirrors.ubuntu.com/mirrors.txt)
+    ubuntu|pop)
+      local mirrors=$(curl --max-time 5 -sSfL http://mirrors.ubuntu.com/mirrors.txt)
       local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       ;;
   esac
 
+  #
+  # ignore or enforce inclusion of current_mirror
+  #
   if [[ -n $current_mirror ]]; then
     if [[ ${exclude_current:-} == "true" ]]; then
-      # exclude current mirror from consideration
-      mirrors=$(echo "$mirrors" | grep -v "$current_mirror" | shuf -n $((max_healthchecks)))
-    elif [[ $mirrors != *"current_mirror"* ]]; then
-      # include current mirror into consideration even if not in remote mirror list
-      mirrors="$current_mirror"$'\n'"$(echo "$mirrors" | shuf -n $((max_healthchecks - 1)))"
+      mirrors=$(echo "$mirrors" | grep -v "$current_mirror")
+    else
+      preferred_mirrors+=("$current_mirror")
     fi
+  fi
+
+  #
+  # select preferred plus random mirros
+  #
+  if [[ ${#preferred_mirrors[@]} -gt 0 ]]; then
+    local preferred_mirror
+    for preferred_mirror in "${preferred_mirrors[@]}"; do
+      mirrors=$(echo "$mirrors" | grep -v "$preferred_mirror")
+    done
+    mirrors=$(printf "%s\n" "${preferred_mirrors[@]}")$'\n'$(echo "$mirrors" | shuf -n $((max_healthchecks - ${#preferred_mirrors[@]} )))
   else
     mirrors=$(echo "$mirrors" | shuf -n $((max_healthchecks)))
   fi
-
   >&2 echo "done"
   if [[ ${verbosity:-} -gt 1 ]]; then
     for mirror in $mirrors; do >&2 echo " -> $mirror"; done
@@ -236,7 +292,7 @@ function find_fast_mirror() {
   #
   # filter out broken and outdated mirrors
   #
-  healthy_mirrors=$(echo "$healthcheck_results" | sort -rg | awk '{ if (NR==1) TS=$1; if ($1==TS) print $2; }')
+  local healthy_mirrors=$(echo "$healthcheck_results" | sort -rg | awk '{ if (NR==1) TS=$1; if ($1==TS) print $2; }')
   if [[ ${verbosity:-} -gt 1 ]]; then
     for mirror in $mirrors; do >&2 echo " -> $mirror UP-TO-DATE"; done
   fi
@@ -245,11 +301,16 @@ function find_fast_mirror() {
   #
   # select mirrors for the speed test
   #
-  if [[ -n $current_mirror && ${exclude_current:-} != "true" ]]; then
-    speedtest_mirrors=$(echo "$current_mirror"$'\n'"$healthy_mirrors" | uniq -u | head -n $((max_speedtests)))
-  else
-    speedtest_mirrors=$(echo "$healthy_mirrors" | head -n $((max_speedtests)))
+  local speedtest_mirrors=''
+  if [[ ${#preferred_mirrors[@]} -gt 0 ]]; then
+    for preferred_mirror in "${preferred_mirrors[@]}"; do
+      if [[ $healthy_mirrors = *"$preferred_mirror"* ]]; then
+        speedtest_mirrors+=$preferred_mirror$'\n'
+      fi
+    done
   fi
+  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | uniq -u | head -n $((max_speedtests)))
+  echo "$speedtest_mirrors"
 
   #
   # test download speed and select fastest mirror
@@ -309,22 +370,23 @@ function set_mirror() {
     set_mirror --help
     return $RC_INVALID_ARGS
   fi
-  if [[ ! ${new_mirror,,} =~ ^(https?|ftp):// ]]; then
+  if ! matches "${new_mirror,,}" '^(https?|ftp)://'; then
     echo "ERROR: Cannot set APT mirror: malformed URL or unsupported protocol: $new_mirror"
     return $RC_INVALID_ARGS
   fi
 
   dist_name=$(get_dist_name)
   case $dist_name in
-    debian|ubuntu) ;;
+    debian|ubuntu|pop) ;;
     *) echo "ERROR: Cannot set APT mirror: unsupported operating system: $dist_name"; return $RC_MISC_ERROR ;;
   esac
 
   #
   # determine the current mirror
   #
-  local current_mirror=$(get_current_mirror || true)
-  if [[ -z $current_mirror ]]; then
+  local current_mirror
+  readarray -t current_mirror < <(get_current_mirror || true)
+  if [[ ${#current_mirror[@]} -lt 1 ]]; then
     echo "ERROR: Cannot set APT mirror: cannot determine current APT mirror."
     return $RC_MISC_ERROR
   fi
@@ -332,17 +394,22 @@ function set_mirror() {
   #
   # reconfigure APT if necessary
   #
-  if [[ "$current_mirror" == "$new_mirror" ]]; then
+  if [[ "${current_mirror[0]}" == "$new_mirror" ]]; then
     echo "Nothing to do, already using: $new_mirror"
   else
-    local backup=/etc/apt/sources.list.bak.$(date +'%Y%m%d_%H%M%S')
+    local backup="${current_mirror[1]}.$(date +'%Y%m%d_%H%M%S').save"
     echo "Creating backup $backup"
-    __sudo cp /etc/apt/sources.list "$backup"
-    echo "Changing mirror from [$current_mirror] to [$new_mirror]..."
-    __sudo sed -i "s|$current_mirror |$new_mirror |g" /etc/apt/sources.list
+    __sudo cp "${current_mirror[1]}" "$backup"
+    echo "Changing mirror from [${current_mirror[0]}] to [$new_mirror] in (${current_mirror[1]})..."
+    __sudo sed -i \
+      -e "s|${current_mirror[0]}\$|$new_mirror|g" \
+      -e "s|${current_mirror[0]} |$new_mirror |g" \
+      "${current_mirror[1]}"
     __sudo apt-get update
+    echo "Successfully changed mirror from [${current_mirror[0]}] to [$new_mirror] in (${current_mirror[1]})"
   fi
 }
+
 
 #
 # main enty point
@@ -350,7 +417,7 @@ function set_mirror() {
 case ${1:-} in
   find)    shift; find_fast_mirror "$@" ;;
   set)     shift; set_mirror "$@" ;;
-  current) shift; get_current_mirror "$@" ;;
+  current) shift; get_current_mirror "$@" | head -n 1 ;;
   *) [[ "${1:-}" == "--help" ]] || ( echo "ERROR: Required command missing"; echo )
      echo "Usage: $(basename "$0") COMMAND";
      echo
