@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: © Vegard IT GmbH (https://vegardit.com) and contributors
+# SPDX-FileContributor: Sebastian Thomschke, Vegard IT GmbH
+# SPDX-License-Identifier: Apache-2.0
+#
+# https://docs.github.com/en/actions/creating-actions/creating-a-composite-action
+name: Configure fast APT mirror
+description: Configures a fast APT mirror in Ubuntu runners, e.g. in case azure.archive.ubuntu.com is slow or unreachable.
+author: Vegard IT GmbH (https://vegardit.com)
+branding:
+  color: blue
+  icon: settings
+
+inputs:
+  healthchecks: { default:   "20", description: "Number of mirrors from the mirrors list to check for availability and up-to-dateness." }
+  speedtests:   { default:   "10", description: "Maximum number of healthy mirrors to test for speed." }
+  parallel:     { default:    "2", description: "Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster." }
+  sample-size:  { default: "1024", description: "Number of kilobytes to download during the speed from each mirror." }
+  sample-time:  { default:    "3", description: "Maximum number of seconds within the sample download from a mirror must finish." }
+  
+  repo-name:   { default: "vegardit/fast-apt-mirror.sh", description: "Repository containing the fast-apt-mirror.sh script" }
+  repo-branch: { default: "v1", description: "Version (i.e. github branch) of the fast-apt-mirror.sh script to use" }
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Linux: Configure fast APT mirror"
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        echo "::group::Linux: Configure fast APT mirror"
+        set -euo pipefail
+
+        echo 'APT::Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-acquire-retries
+
+        if [[ "${{ env.ACT }}" != "true" ]]; then
+          # Workaround to avoid sporadic connectivity issues "Could not connect to azure.archive.ubuntu.com:80"
+          # see https://github.com/actions/runner-images/issues/675
+          # see https://github.com/actions/runner-images/issues/704
+          curl -sSfL https://raw.githubusercontent.com/${{ inputs.repo-name }}/${{ inputs.repo-branch }}/fast-apt-mirror.sh -o $HOME/fast-apt-mirror.sh
+          bash $HOME/fast-apt-mirror.sh find --apply -v \
+            --healthchecks ${{ inputs.healthchecks }} \
+            --speedtests   ${{ inputs.speedtests }} \
+            --parallel     ${{ inputs.parallel }} \
+            --sample-size  ${{ inputs.sample-size }} \
+            --sample-time  ${{ inputs.sample-time }}
+        fi
+
+        # refresh pkg cache if it does not exist or is older than 60min.
+        # avoid potential 404 see https://github.com/actions/runner-images/issues/592
+        if [[ ! -e /var/lib/apt/lists/partial ]] || [[ $(( $(date +%s) - $(sudo date +%s -r /var/lib/apt/lists/partial) )) -gt 3600 ]]; then
+          sudo apt-get update
+        fi
+        echo "::endgroup::"

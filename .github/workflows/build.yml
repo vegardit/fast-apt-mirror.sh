@@ -45,6 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
+        - ubuntu-latest
         - ubuntu-22.04
         - ubuntu-20.04
         - windows-latest
@@ -53,18 +54,24 @@ jobs:
     - name: Git Checkout
       uses: actions/checkout@v3 #https://github.com/actions/checkout
 
+    - name: "Linux: Configure APT"
+      uses: ./
+      with:
+        repo-name:   ${{ github.repository }}
+        repo-branch: ${{ github.ref_name }}
+
     - name: Run shellcheck
       run: bash tests/run-shellcheck.sh
 
     - name: Install bashcov
-      if: ${{ runner.os == 'Linux' }}
+      if: ${{ runner.os == 'Linux' && !env.ACT }}
       run: sudo gem install bashcov simplecov-console
 
     - name: Run tests
       timeout-minutes: 5
       run: |
         set -eu
-        if [[ "${{ runner.os }}" == "Linux" ]]; then
+        if [[ "${{ runner.os }}" == "Linux" && "${{ env.ACT }}" != "true" ]]; then
           bashcov --skip-uncovered tests/run-tests.sh
         else
           bash tests/run-tests.sh

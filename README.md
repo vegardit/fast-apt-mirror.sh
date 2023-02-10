@@ -9,8 +9,9 @@
 **Feedback and high-quality pull requests are highly welcome!**
 
 1. [What is it?](#what-is-it)
-1. [Installation](#installation)
-1. [Usage](#usage)
+1. [Usage as GitHub Action](#github_action)
+1. [Usage on the commandline](#cli)
+   1. [Installation](#installation)
    1. [`current` command](#current-command)
    1. [`find` command](#find-command)
    1. [`set` command](#set-command)
@@ -24,10 +25,31 @@
 on [Debian](https://www.debian.org/), [Ubuntu](https://ubuntu.com/), [Pop!_OS](https://pop.system76.com/) systems.
 
 It was born out of the ongoing stability [issues](https://github.com/actions/runner-images/issues?q=is%3Aissue+azure.archive.ubuntu.com) with the `azure.archive.ubuntu.com` Ubuntu
-mirror pre-configured in Github Actions runners.
+mirror pre-configured in GitHub Actions runners.
 
 
-## <a name="installation"></a>Installation
+## <a name="github_action"></a>Usage as GitHub Action
+
+```yaml
+name: Build
+on: [ push, pull_request ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Configure Fast APT Mirror
+      uses: vegardit/fast-apt-mirror.sh@v1
+      with: # the following parameters are listed with their action default values and are optional
+        healthchecks:  20 # Number of mirrors from the mirrors list to check for availability and up-to-dateness
+        speedtests:    10 # Maximum number of healthy mirrors to test for speed
+        parallel:       2 # Number of parallel speed tests
+        sample-size: 1024 # Number of kilobytes to download during the speed from each mirror
+        sample-time:    3 # Maximum number of seconds within the sample download from a mirror must finish
+```
+
+## <a name="cli"></a>Usage on the command line
+
+### <a name="installation"></a>Installation
 
 For example:
 ```bash
@@ -37,13 +59,9 @@ $ sudo apt-get install -y bash curl apt-transport-https ca-certificates
 # install fast-apt-mirror.sh under /usr/local/bin/ to make it automatically available via $PATH
 $ sudo curl https://raw.githubusercontent.com/vegardit/fast-apt-mirror.sh/v1/fast-apt-mirror.sh -o /usr/local/bin/fast-apt-mirror.sh
 $ sudo chmod 755 /usr/local/bin/fast-apt-mirror.sh
-```
 
-
-## <a name="usage"></a>Usage
-
-Available sub commands:
-```yml
+# show the help
+$ fast-apt-mirror.sh --help
 fast-apt-mirror.sh COMMAND
 
 Available commands:
@@ -78,11 +96,11 @@ Usage:
 fast-apt-mirror.sh find [OPTION]...
 
 Options:
-     --apply            - Replaces the current APT mirror in /etc/apt/sources.list with a fast mirror and runs 'sudo apt-get update'
+     --apply            - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'
      --exclude-current  - If specified, don't include the current APT mirror in the speed tests.
- -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster.
-     --healthchecks N   - Number of mirrors from the Ubuntu/Debian mirror lists to check for availability and up-to-dateness - default is 20
+     --healthchecks N   - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20
      --speedtests N     - Maximum number of healthy mirrors to test for speed - default is 5
+ -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster.
      --sample-size KB   - Number of kilobytes to download during the speed from each mirror - default is 200KB
      --sample-time SECS - Maximum number of seconds within the sample download from a mirror must finish - default is 3
  -v, --verbose          - More output. Specify multiple times to increase verbosity.
