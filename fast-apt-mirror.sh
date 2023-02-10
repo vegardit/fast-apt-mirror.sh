@@ -121,8 +121,8 @@ shopt -s extglob
 
 function find_fast_mirror() {
   if ! hash curl &>/dev/null; then
-    >&2 echo "ERROR: Required command 'curl' not found! Try: apt install curl"
-    return $RC_MISC_ERROR
+    >&2 echo "INFO: Required command 'curl' not found, trying to install it..."
+    __sudo apt-get update && __sudo apt-get install -y --no-install-recommends curl ca-certificates || return $RC_MISC_ERROR
   fi
 
   local start_at=$(date +%s)
