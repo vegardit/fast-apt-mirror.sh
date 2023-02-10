@@ -14,7 +14,13 @@
 if [ -z "${BASH_VERSINFO:-}" ]; then /usr/bin/env bash "$0" "$@"; exit; fi
 
 if (return 0 2>/dev/null); then
-  >&2 echo "WARNING: This file should not be sourced!"
+  >&2 echo "ERROR: ${BASH_SOURCE[0]} should not be sourced!"
+  return
+fi
+
+if [[ ${BASH_VERSINFO} -lt 4 ]]; then
+  >&2 echo "ERROR: ${BASH_SOURCE[0]} requires Bash 4 or higher!"
+  exit 1
 fi
 
 set -uo pipefail
