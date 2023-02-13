@@ -47,6 +47,27 @@ jobs:
         sample-time:    3 # Maximum number of seconds within the sample download from a mirror must finish
 ```
 
+The action output will look like this:
+```sh
+Current mirror: http://azure.archive.ubuntu.com/ubuntu/ (/etc/apt/sources.list)
+Randomly selecting 20 mirrors...done
+Checking health status of 20 mirrors....................done
+ -> 17 mirrors are reachable and up-to-date
+Speed testing 10 of the available 17 mirrors (sample download size: 1024KB)..........done
+ -> http://azure.archive.ubuntu.com/ubuntu/ (85MB/s) determined as fastest mirror within 4 seconds
+ -> http://pubmirrors.dal.corespace.com/ubuntu/ (3.7MB/s)
+ -> http://mirrors.xmission.com/ubuntu/ (3.0MB/s)
+ -> http://www.gtlib.gatech.edu/pub/ubuntu/ (2.0MB/s)
+ -> http://mirrors.rit.edu/ubuntu/ (1.8MB/s)
+ -> http://ubuntu.cs.utah.edu/ubuntu/ (1.8MB/s)
+ -> https://mirror.us.leaseweb.net/ubuntu/ (1.6MB/s)
+ -> https://mirrors.iu13.net/ubuntu/ (1.5MB/s)
+ -> http://mirrors.syringanetworks.net/ubuntu-archive/ (1.4MB/s)
+ -> https://mirrors.bloomu.edu/ubuntu/ (1.1MB/s)
+Current mirror: http://azure.archive.ubuntu.com/ubuntu/ (/etc/apt/sources.list)
+Nothing to do, already using: http://azure.archive.ubuntu.com/ubuntu/
+```
+
 ## <a name="cli"></a>Usage on the command line
 
 ### <a name="installation"></a>Installation
