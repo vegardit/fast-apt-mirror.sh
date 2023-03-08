@@ -36,13 +36,14 @@ runs:
           # Workaround to avoid sporadic connectivity issues "Could not connect to azure.archive.ubuntu.com:80"
           # see https://github.com/actions/runner-images/issues/675
           # see https://github.com/actions/runner-images/issues/704
-          curl -sSfL https://raw.githubusercontent.com/${{ inputs.repo-name }}/${{ inputs.repo-branch }}/fast-apt-mirror.sh -o $HOME/fast-apt-mirror.sh
-          bash $HOME/fast-apt-mirror.sh find --apply -v \
-            --healthchecks ${{ inputs.healthchecks }} \
-            --speedtests   ${{ inputs.speedtests }} \
-            --parallel     ${{ inputs.parallel }} \
-            --sample-size  ${{ inputs.sample-size }} \
-            --sample-time  ${{ inputs.sample-time }}
+          if (set -x; curl -sSfL --retry 3 --max-time 6 https://raw.githubusercontent.com/${{ inputs.repo-name }}/${{ inputs.repo-branch }}/fast-apt-mirror.sh -o $HOME/fast-apt-mirror.sh); then
+            bash $HOME/fast-apt-mirror.sh find --apply -v \
+              --healthchecks ${{ inputs.healthchecks }} \
+              --speedtests   ${{ inputs.speedtests }} \
+              --parallel     ${{ inputs.parallel }} \
+              --sample-size  ${{ inputs.sample-size }} \
+              --sample-time  ${{ inputs.sample-time }}
+          fi
         fi
 
         # refresh pkg cache if it does not exist or is older than 60min.
