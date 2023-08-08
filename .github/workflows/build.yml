@@ -114,7 +114,6 @@ jobs:
         - debian:bookworm-slim
         - debian:buster-slim
         - debian:bullseye-slim
-        - debian:stretch-slim
         - ubuntu:devel
         - ubuntu:latest
         - ubuntu:22.04
