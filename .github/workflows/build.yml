@@ -65,7 +65,19 @@ jobs:
 
     - name: Install bashcov
       if: ${{ runner.os == 'Linux' && !env.ACT }}
-      run: sudo gem install bashcov simplecov-console
+      run: |
+        ruby --version
+        echo "gem $(gem --version)"
+
+        if [[ "${{ matrix.os}}" == "ubuntu-20.04" ]]; then
+          # workaround for bashcov error:
+          #    The last version of bashcov (>= 0) to support your Ruby & RubyGems was 1.8.2. 
+          #    Try installing it with `gem install bashcov -v 1.8.2`"        
+          sudo gem install bashcov -v 1.8.2
+        else
+          sudo gem install bashcov
+        fi
+        sudo gem install simplecov-console
 
     - name: Run tests
       timeout-minutes: 5
