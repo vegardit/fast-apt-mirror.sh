@@ -83,7 +83,7 @@ function get_dist_name() {
 
 @test "find: Find mirror if executed without arguments" {
   assert_exitcode $RC_OK find
-  assert_regex "$output" '-> (https?|ftp)://.* determined as fastest mirror'
+  assert_regex "$output" '=> (https?|ftp)://.* determined as fastest mirror'
   refute_regex "$output" 'ERROR:'
 }
 
@@ -92,7 +92,7 @@ function get_dist_name() {
   assert_regex "$output" 'Randomly selecting 8 mirrors...done'
   assert_regex "$output" 'Speed testing 2 of the available'
   assert_regex "$output" '(sample download size: 10KB)'
-  assert_regex "$output" '-> (https?|ftp)://.* determined as fastest mirror'
+  assert_regex "$output" '=> (https?|ftp)://.* determined as fastest mirror'
   refute_regex "$output" 'ERROR:'
 }
 

@@ -49,6 +49,6 @@ runs:
         # refresh pkg cache if it does not exist or is older than 60min.
         # avoid potential 404 see https://github.com/actions/runner-images/issues/592
         if [[ ! -e /var/lib/apt/lists/partial ]] || [[ $(( $(date +%s) - $(sudo date +%s -r /var/lib/apt/lists/partial) )) -gt 3600 ]]; then
-          sudo apt-get update
+          (set -x; sudo apt-get update)
         fi
         echo "::endgroup::"

@@ -283,14 +283,16 @@ function find_fast_mirror() {
     mirrors=$(echo "$mirrors" | shuf -n "$max_healthchecks")
   fi
   >&2 echo "done"
-  if [[ ${verbosity:-} -gt 1 ]]; then
+
+  mirrors=$(echo "$mirrors" | sort)
+  if [[ $verbosity -gt 1 ]]; then
     for mirror in $mirrors; do >&2 echo " -> $mirror"; done
   fi
 
   #
   # checking reachability and sync status of mirrors
   #
-  >&2 echo -n "Checking health status of $(echo "$mirrors" | wc -l) mirrors"
+  >&2 echo -n "Checking health status of $(echo "$mirrors" | wc -l) mirrors using '$last_modified_path'"
   # returns a list with content like:
   # 1675322068 http://archive.ubuntu.com/ubuntu/
   # 1675322068 http://ftp.halifax.rwth-aachen.de/ubuntu/
@@ -305,11 +307,21 @@ function find_fast_mirror() {
   #
   # filter out broken and outdated mirrors
   #
-  local healthy_mirrors=$(echo "$healthcheck_results" | sort -rg | awk '{ if (NR==1) TS=$1; if ($1==TS) print $2; }')
-  if [[ ${verbosity:-} -gt 1 ]]; then
-    for mirror in $mirrors; do >&2 echo " -> $mirror UP-TO-DATE"; done
+  local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -rg) # sort by last modified date
+  local healthy_mirrors_date=${healthcheck_results_sorted_by_date%% *} # the last modified date of healthy up-to-date mirrors
+  local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep "^$healthy_mirrors_date " | cut -d" " -f2-)
+  if [[ $verbosity -gt 0 ]]; then
+    while IFS= read -r mirror; do
+      local last_modified=${mirror%% *}
+      local mirror_url=${mirror#* }
+      case $last_modified in
+        "$healthy_mirrors_date") >&2 echo " -> UP-TO-DATE (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url" ;;
+        0)                       >&2 echo " ->                         n/a                          $mirror_url" ;;
+        *)                       >&2 echo " -> outdated   (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url" ;;
+      esac
+    done <<< "$healthcheck_results"
   fi
-  >&2 echo " -> $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
+  >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
 
   #
   # select mirrors for the speed test
@@ -323,13 +335,12 @@ function find_fast_mirror() {
     done
   fi
   speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | uniq -u | head -n "$max_speedtests")
-  echo "$speedtest_mirrors"
 
   #
   # test download speed and select fastest mirror
   #
   >&2 echo -n "Speed testing $(echo "$speedtest_mirrors" | wc -l) of the available $(echo "$healthy_mirrors" | wc -l) mirrors (sample download size: $((sample_size_kb))KB)"
-  mirrors_with_speed=$(
+  local mirrors_with_speed=$(
     echo "$speedtest_mirrors" \
     | __xargs -P $((download_parallel)) -i bash -c \
              "curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sSf -w '%{speed_download} {}\n' -o /dev/null {}ls-lR.gz 2>/dev/null || true; >&2 echo -n '.'" \
@@ -340,17 +351,19 @@ function find_fast_mirror() {
     >&2 echo "ERROR: Could not determine any fast mirror matching required criterias."
     return $RC_MISC_ERROR
   fi
-  fastest_mirror=$(echo "${mirrors_with_speed%%$'\n'*}" | cut -d" " -f2)
+  local fastest_mirror=$(echo "${mirrors_with_speed%%$'\n'*}" | cut -d" " -f2)
   fastest_mirror_speed=$(echo "${mirrors_with_speed%%$'\n'*}" | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
-  >&2 echo " -> $fastest_mirror ($fastest_mirror_speed) determined as fastest mirror within $(( $(date +%s) - start_at )) seconds"
-  if [[ ${verbosity:-} -gt 0 ]]; then
-    echo "$mirrors_with_speed" | tail -n +2 | while IFS= read -r mirror; do
+  local speed_test_duration=$(( $(date +%s) - start_at ))
+  if [[ $verbosity -gt 0 ]]; then
+    echo "$mirrors_with_speed" | tail -n +2 | tac | while IFS= read -r mirror; do
       mirror_speed=$(echo "${mirror%%$'\n'*}" | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
       >&2 echo " -> $(echo "$mirror" | cut -d" " -f2) ($mirror_speed)"
     done
   fi
   if [[ ${apply:-} == "true" ]]; then
     set_mirror "$fastest_mirror" >&2 || return $?
+  else
+    >&2 echo " => $fastest_mirror ($fastest_mirror_speed) determined as fastest mirror within $speed_test_duration seconds"
   fi
 
   #
