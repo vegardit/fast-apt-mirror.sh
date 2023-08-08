@@ -16,7 +16,7 @@ inputs:
   parallel:     { default:    "2", description: "Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster." }
   sample-size:  { default: "1024", description: "Number of kilobytes to download during the speed from each mirror." }
   sample-time:  { default:    "3", description: "Maximum number of seconds within the sample download from a mirror must finish." }
-  
+
   repo-name:   { default: "vegardit/fast-apt-mirror.sh", description: "Repository containing the fast-apt-mirror.sh script" }
   repo-branch: { default: "v1", description: "Version (i.e. github branch) of the fast-apt-mirror.sh script to use" }
 
@@ -37,7 +37,7 @@ runs:
           # see https://github.com/actions/runner-images/issues/675
           # see https://github.com/actions/runner-images/issues/704
           if (set -x; curl -sSfL --retry 3 --max-time 6 https://raw.githubusercontent.com/${{ inputs.repo-name }}/${{ inputs.repo-branch }}/fast-apt-mirror.sh -o $HOME/fast-apt-mirror.sh); then
-            bash $HOME/fast-apt-mirror.sh find --apply -v \
+            bash $HOME/fast-apt-mirror.sh find --apply --verbose \
               --healthchecks ${{ inputs.healthchecks }} \
               --speedtests   ${{ inputs.speedtests }} \
               --parallel     ${{ inputs.parallel }} \
