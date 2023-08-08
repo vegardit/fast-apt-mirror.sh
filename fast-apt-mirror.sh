@@ -77,6 +77,13 @@ function __sudo() {
   fi
 }
 
+function assert_option_is_int() {
+  if ! [ "$2" -eq "$2" ] 2>/dev/null; then
+    echo "Option $1: '$2' is not a valid integer"
+    exit 1
+  fi
+}
+
 function get_dist_name() {
   if compgen -G "/etc/*-release" >/dev/null; then
     cat /etc/*-release | grep "^ID=" | cut -d= -f2
@@ -179,15 +186,15 @@ function find_fast_mirror() {
   #
   while [ $# -gt 0 ]; do
     case $1 in
-      --apply)               local apply=true ;;
-      --exclude-current)     local exclude_current=true ;;
-      -p|--parallel)  shift; local download_parallel=$1 ;;
-      --healthchecks) shift; local max_healthchecks=$1 ;;
-      --speedtests)   shift; local max_speedtests=$1 ;;
-      --sample-size)  shift; local sample_size_kb=$1 ;;
-      --sample-time)  shift; local sample_time_secs=$1 ;;
-      --verbose)             local verbosity=$(( ${verbosity:-0} + 1 )) ;;
-      -+(v))                 local verbosity=$(( ${verbosity:-0} + ${#1} - 1 )) ;;
+      -p|--parallel)  assert_option_is_int "$1" "$2"; shift; local download_parallel=$1 ;;
+      --healthchecks) assert_option_is_int "$1" "$2"; shift; local max_healthchecks=$1 ;;
+      --speedtests)   assert_option_is_int "$1" "$2"; shift; local max_speedtests=$1 ;;
+      --sample-size)  assert_option_is_int "$1" "$2"; shift; local sample_size_kb=$1 ;;
+      --sample-time)  assert_option_is_int "$1" "$2"; shift; local sample_time_secs=$1 ;;
+      --apply)           local apply=true ;;
+      --exclude-current) local exclude_current=true ;;
+      --verbose)         local verbosity=$(( ${verbosity:-0} + 1 )) ;;
+      -+(v))             local verbosity=$(( ${verbosity:-0} + ${#1} - 1 )) ;;
       --help)
         echo "Usage: $(basename "$0") find [OPTION]...";
         echo
@@ -224,7 +231,7 @@ function find_fast_mirror() {
        local dist_name=ubuntu
        local dist_version_name=bionic
        #local dist_name=debian
-       #local dist_version_name=bullseye
+       #local dist_version_name=bookworm
        local dist_arch=amd64
        ;;
   esac
@@ -237,7 +244,7 @@ function find_fast_mirror() {
   #
   # download mirror lists
   #
-  >&2 echo -n "Randomly selecting $((max_healthchecks)) mirrors..."
+  >&2 echo -n "Randomly selecting $max_healthchecks mirrors..."
   local preferred_mirrors=()
   case $dist_name in
     debian)
@@ -271,9 +278,9 @@ function find_fast_mirror() {
     for preferred_mirror in "${preferred_mirrors[@]}"; do
       mirrors=$(echo "$mirrors" | grep -v "$preferred_mirror")
     done
-    mirrors=$(printf "%s\n" "${preferred_mirrors[@]}")$'\n'$(echo "$mirrors" | shuf -n $((max_healthchecks - ${#preferred_mirrors[@]} )))
+    mirrors=$(printf "%s\n" "${preferred_mirrors[@]}")$'\n'$(echo "$mirrors" | shuf -n $(( max_healthchecks - ${#preferred_mirrors[@]} )))
   else
-    mirrors=$(echo "$mirrors" | shuf -n $((max_healthchecks)))
+    mirrors=$(echo "$mirrors" | shuf -n "$max_healthchecks")
   fi
   >&2 echo "done"
   if [[ ${verbosity:-} -gt 1 ]]; then
@@ -315,7 +322,7 @@ function find_fast_mirror() {
       fi
     done
   fi
-  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | uniq -u | head -n $((max_speedtests)))
+  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | uniq -u | head -n "$max_speedtests")
   echo "$speedtest_mirrors"
 
   #
