@@ -298,7 +298,7 @@ function find_fast_mirror() {
   # shellcheck disable=SC2016 # Expressions don't expand in single quotes, use double quotes for that
   local healthcheck_results=$(echo "$mirrors" | \
     __xargs -i -P "$(echo "$mirrors" | wc -l)" bash -c \
-       'last_modified=$(set -o pipefail; curl --max-time 3 -sSf --head "{}'"${last_modified_path}"'" 2>/dev/null | grep -i "last-modified" | cut -d" " -f2- | LANG=C date -f- -u +%s || echo 0); echo "$last_modified {}"; >&2 echo -n "."'
+       'last_modified=$(set -o pipefail; curl --max-time 3 -sSfL --head "{}'"${last_modified_path}"'" 2>/dev/null | grep -i "last-modified" | cut -d" " -f2- | LANG=C date -f- -u +%s || echo 0); echo "$last_modified {}"; >&2 echo -n "."'
   )
   >&2 echo "done"
 
