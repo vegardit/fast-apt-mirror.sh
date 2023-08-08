@@ -340,12 +340,12 @@ function find_fast_mirror() {
     >&2 echo "ERROR: Could not determine any fast mirror matching required criterias."
     return $RC_MISC_ERROR
   fi
-  fastest_mirror=$(echo "$mirrors_with_speed" | head -1 | cut -d" " -f2)
-  fastest_mirror_speed=$(echo "$mirrors_with_speed" | head -1 | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
+  fastest_mirror=$(echo "${mirrors_with_speed%%$'\n'*}" | cut -d" " -f2)
+  fastest_mirror_speed=$(echo "${mirrors_with_speed%%$'\n'*}" | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
   >&2 echo " -> $fastest_mirror ($fastest_mirror_speed) determined as fastest mirror within $(( $(date +%s) - start_at )) seconds"
   if [[ ${verbosity:-} -gt 0 ]]; then
     echo "$mirrors_with_speed" | tail -n +2 | while IFS= read -r mirror; do
-      mirror_speed=$(echo "$mirror" | head -1 | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
+      mirror_speed=$(echo "${mirror%%$'\n'*}" | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
       >&2 echo " -> $(echo "$mirror" | cut -d" " -f2) ($mirror_speed)"
     done
   fi
