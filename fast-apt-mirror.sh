@@ -250,7 +250,7 @@ function find_fast_mirror() {
     debian)
       # see https://deb.debian.org/
       preferred_mirrors+=("$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}")")
-      local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/' | sort -u)
+      local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/')
       local last_modified_path="/dists/${dist_version_name}-updates/main/Contents-${dist_arch}.gz"
       ;;
     ubuntu|pop)
@@ -258,6 +258,7 @@ function find_fast_mirror() {
       local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       ;;
   esac
+  mirrors=$(echo "$mirrors" | sort -u)
 
   #
   # ignore or enforce inclusion of current_mirror
