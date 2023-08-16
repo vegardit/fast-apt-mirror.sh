@@ -309,7 +309,7 @@ function find_fast_mirror() {
   #
   # filter out broken and outdated mirrors
   #
-  local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -rg) # sort by last modified date
+  local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -t' ' -k1,1rn -k2) # sort by last modified date and URL
   local healthy_mirrors_date=${healthcheck_results_sorted_by_date%% *} # the last modified date of healthy up-to-date mirrors
   local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep "^$healthy_mirrors_date " | cut -d" " -f2-)
   if [[ $verbosity -gt 0 ]]; then
@@ -321,7 +321,7 @@ function find_fast_mirror() {
         0)                       >&2 echo " ->                         n/a                          $mirror_url" ;;
         *)                       >&2 echo " -> outdated   (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url" ;;
       esac
-    done <<< "$healthcheck_results"
+    done <<< "$healthcheck_results_sorted_by_date"
   fi
   >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
 
