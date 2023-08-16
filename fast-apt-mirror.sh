@@ -121,14 +121,6 @@ function read_main_mirror_from_deb822_file() {
   done < "$file"
 }
 
-function read_main_mirror_from_sources_list_file() {
-  # https://repolib.readthedocs.io/en/latest/deb822-format.html
-  file=$1
-  if [[ -f "$file" ]]; then
-    grep -E "^deb\s+(https?|ftp)://.*\s+main" "$file" | head -1 | awk '{ print $2 }'
-  fi
-}
-
 
 ############################
 # returns two lines:
@@ -137,7 +129,7 @@ function read_main_mirror_from_sources_list_file() {
 ############################
 function get_current_mirror() {
   >&2 echo -n "Current mirror: "
-  dist_name=$(get_dist_name)
+  local dist_name=$(get_dist_name)
   case $dist_name in
     debian|ubuntu|pop)
        ;;
@@ -146,15 +138,24 @@ function get_current_mirror() {
        ;;
   esac
 
-  local current_mirror_url='' current_mirror_config
+  local current_mirror_url=''
+  local current_mirror_cfgfile
   case $dist_name in
-    debian)     current_mirror_config='/etc/apt/sources.list.d/debian.sources'; current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_config") ;;
-    ubuntu|pop) current_mirror_config='/etc/apt/sources.list.d/system.sources'; current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_config") ;;
+    debian)     current_mirror_cfgfile='/etc/apt/sources.list.d/debian.sources' ;;
+    ubuntu|pop) current_mirror_cfgfile='/etc/apt/sources.list.d/system.sources' ;;
   esac
+  current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_cfgfile")
 
   if [[ -z $current_mirror_url ]]; then
-    current_mirror_config=/etc/apt/sources.list
-    current_mirror_url=$(read_main_mirror_from_sources_list_file /etc/apt/sources.list)
+    if [[ -f /etc/apt/sources.list ]]; then
+       if grep -q -E "^deb\s+mirror\+file:/etc/apt/apt-mirrors.txt\s+.*\s+main" /etc/apt/sources.list; then
+         current_mirror_url=$(awk 'NR==1 { print $1 }' /etc/apt/apt-mirrors.txt)
+         current_mirror_cfgfile=/etc/apt/apt-mirrors.txt
+       else
+         current_mirror_url=$(grep -E "^deb\s+(https?|ftp)://.*\s+main" /etc/apt/sources.list | awk 'NR==1 { print $2 }')
+         current_mirror_cfgfile=/etc/apt/sources.list
+       fi
+    fi
   fi
 
   if [[ -z $current_mirror_url ]]; then
@@ -162,12 +163,12 @@ function get_current_mirror() {
     return
   fi
 
-  >&2 echo "$current_mirror_url ($current_mirror_config)"
+  >&2 echo "$current_mirror_url ($current_mirror_cfgfile)"
 
   # if function is piped or output is caputured write the selected APT mirror to STDOUT
   if [[ -p /dev/stdout ]]; then
     echo "$current_mirror_url"
-    echo "$current_mirror_config"
+    echo "$current_mirror_cfgfile"
   fi
 }
 
@@ -221,7 +222,7 @@ function find_fast_mirror() {
   local max_healthchecks=${max_healthchecks:-20}
   local verbosity=${verbosity:-0}
 
-  dist_name=$(get_dist_name)
+  local dist_name=$(get_dist_name)
   case $dist_name in
     debian|ubuntu|pop)
        local dist_version_name=$(get_dist_version_name)
