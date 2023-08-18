@@ -126,6 +126,10 @@ jobs:
         - debian:bookworm-slim
         - debian:buster-slim
         - debian:bullseye-slim
+        - "bitnami/minideb:latest"
+        - "bitnami/minideb:bookworm"
+        - "bitnami/minideb:buster"
+        - "bitnami/minideb:bullseye"
         - ubuntu:devel
         - ubuntu:latest
         - ubuntu:22.04
