@@ -103,7 +103,7 @@ function get_dist_name() {
   esac
   assert_exitcode $RC_OK find -vvv --apply --exclude-current
   >&3 echo "|-> ${lines[-2]}"
-  assert_regex "$output" 'Creating backup /etc/apt/sources.*.save'
+  assert_regex "$output" 'Creating backup /etc/apt/(sources\.list|apt-mirrors\.txt).*.save'
   assert_regex "$output" "Changing mirror from \[.*\] to \[.*\]"
   assert_regex "$output" "Reading package lists..."
   assert_regex "$output" "Successfully changed mirror from \[.*\] to \[.*\]"
@@ -145,7 +145,7 @@ function get_dist_name() {
 
   assert_exitcode $RC_OK set $mirror_url2
   >&3 echo "|-> ${lines[-1]}"
-  assert_regex "$output" 'Creating backup /etc/apt/sources.*.save'
+  assert_regex "$output" 'Creating backup /etc/apt/(sources\.list|apt-mirrors\.txt).*.save'
   assert_regex "$output" "Changing mirror from \[.*\] to \[$mirror_url2\]"
   assert_regex "$output" "Get:[1-9]+ $mirror_url2"
   assert_regex "$output" "Reading package lists..."
