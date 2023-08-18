@@ -130,6 +130,7 @@ jobs:
         - "bitnami/minideb:bookworm"
         - "bitnami/minideb:buster"
         - "bitnami/minideb:bullseye"
+        - "kalilinux/kali-last-release:latest"
         - ubuntu:devel
         - ubuntu:latest
         - ubuntu:22.04
