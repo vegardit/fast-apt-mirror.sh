@@ -336,7 +336,8 @@ function find_fast_mirror() {
       fi
     done
   fi
-  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | uniq -u | head -n "$max_speedtests")
+  # awk '!x[$0]++' -> https://stackoverflow.com/a/11532197/5116073
+  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | awk '!x[$0]++' | head -n "$max_speedtests")
 
   #
   # test download speed and select fastest mirror
