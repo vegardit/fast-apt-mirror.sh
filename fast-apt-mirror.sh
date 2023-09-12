@@ -363,10 +363,10 @@ function find_fast_mirror() {
       >&2 echo " -> $(echo "$mirror" | cut -d" " -f2) ($mirror_speed)"
     done
   fi
+  >&2 echo " => $fastest_mirror ($fastest_mirror_speed) determined as fastest mirror within $speed_test_duration seconds"
+
   if [[ ${apply:-} == "true" ]]; then
     set_mirror "$fastest_mirror" >&2 || return $?
-  else
-    >&2 echo " => $fastest_mirror ($fastest_mirror_speed) determined as fastest mirror within $speed_test_duration seconds"
   fi
 
   #
