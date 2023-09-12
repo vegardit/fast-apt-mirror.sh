@@ -147,7 +147,7 @@ function get_dist_name() {
   >&3 echo "|-> ${lines[-1]}"
   assert_regex "$output" 'Creating backup /etc/apt/(sources\.list|apt-mirrors\.txt).*.save'
   assert_regex "$output" "Changing mirror from \[.*\] to \[$mirror_url2\]"
-  assert_regex "$output" "Get:[1-9]+ $mirror_url2"
+  assert_regex "$output" "(Get|Hit):[1-9]+ $mirror_url2"
   assert_regex "$output" "Reading package lists..."
   refute_regex "$output" 'ERROR:'
 }

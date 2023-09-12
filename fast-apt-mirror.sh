@@ -433,6 +433,7 @@ function set_mirror() {
     __sudo sed -i \
       -e "s|${current_mirror[0]}\$|$new_mirror|g" \
       -e "s|${current_mirror[0]} |$new_mirror |g" \
+      -e "s|${current_mirror[0]}\t|$new_mirror\t|g" \
       "${current_mirror[1]}"
     __sudo apt-get update
     echo "Successfully changed mirror from [${current_mirror[0]}] to [$new_mirror] in (${current_mirror[1]})"
