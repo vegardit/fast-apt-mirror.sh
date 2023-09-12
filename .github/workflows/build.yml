@@ -52,7 +52,7 @@ jobs:
 
     steps:
     - name: Git Checkout
-      uses: actions/checkout@v3 #https://github.com/actions/checkout
+      uses: actions/checkout@v4 #https://github.com/actions/checkout
 
     - name: "Linux: Configure APT"
       uses: ./
@@ -140,7 +140,7 @@ jobs:
 
     steps:
     - name: Git Checkout
-      uses: actions/checkout@v3 #https://github.com/actions/checkout
+      uses: actions/checkout@v4 #https://github.com/actions/checkout
 
     - name: Run tests in [${{ matrix.image }}]
       timeout-minutes: 5
