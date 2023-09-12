@@ -43,7 +43,7 @@ runs:
               --parallel     ${{ inputs.parallel }} \
               --sample-size  ${{ inputs.sample-size }} \
               --sample-time  ${{ inputs.sample-time }}
-          fi
+          fi || exit 0 # don't fail action if APT mirror detection failed for whatever reason
         fi
 
         # refresh pkg cache if it does not exist or is older than 60min.
