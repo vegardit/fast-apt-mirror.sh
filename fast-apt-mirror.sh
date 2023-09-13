@@ -41,20 +41,19 @@ trap 'rc=$?; if [[ $rc -ne '$RC_MISC_ERROR' && $rc -ne '$RC_INVALID_ARGS' ]]; th
 # if TRACE_SCRIPTS=1 or TRACE_SCRIPTS contains a glob pattern that matches $0
 # shellcheck disable=SC2053 # Quote the right-hand side of == in [[ ]] to prevent glob matching
 if [[ ${TRACE_SCRIPTS:-} == "1" || "$0" == ${TRACE_SCRIPTS:-} ]]; then
-   if [[ $- =~ x ]]; then
-      # "set -x" was specified already, we only improve the PS4 in this case
-      PS4='+\033[90m[$?] $BASH_SOURCE:$LINENO ${FUNCNAME[0]}()\033[0m '
-   else
-      # "set -x" was not specified, we use a DEBUG trap for better debug output
-      set -o functrace
+  if [[ $- =~ x ]]; then
+    # "set -x" was specified already, we only improve the PS4 in this case
+    PS4='+\033[90m[$?] $BASH_SOURCE:$LINENO ${FUNCNAME[0]}()\033[0m '
+  else
+    # "set -x" was not specified, we use a DEBUG trap for better debug output
+    set -o functrace
 
-      __trace() {
-         printf "\e[90m#[$?] ${BASH_SOURCE[1]}:$1 ${FUNCNAME[1]}() %*s\e[35m$BASH_COMMAND\e[m\n" "$(( 2 * (BASH_SUBSHELL + ${#FUNCNAME[*]} - 2) ))" >&2
-      }
-      trap '__trace $LINENO' DEBUG
-   fi
+    __trace() {
+      printf "\e[90m#[$?] ${BASH_SOURCE[1]}:$1 ${FUNCNAME[1]}() %*s\e[35m$BASH_COMMAND\e[m\n" "$(( 2 * (BASH_SUBSHELL + ${#FUNCNAME[*]} - 2) ))" >&2
+    }
+    trap '__trace $LINENO' DEBUG
+  fi
 fi
-
 
 
 #################################################
@@ -203,8 +202,8 @@ function find_fast_mirror() {
         echo "$DESC_FIND"
         echo
         echo "Options:"
-        echo "     --apply             - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'"
-        echo "     --exclude-current   - If specified, don't include the current APT mirror in the speed tests."
+        echo "     --apply             - Replaces the currently configured APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'"
+        echo "     --exclude-current   - If specified, don't include the currently configured APT mirror in the speed tests."
         echo "     --healthchecks N    - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20"
         echo "     --ignore-sync-state - Don't check up-to-dateness of mirrors as part of healthchecks"
         echo "     --speedtests N      - Maximum number of healthy mirrors to test for speed - default is 5"
@@ -227,16 +226,16 @@ function find_fast_mirror() {
   local dist_name=$(get_dist_name)
   case $dist_name in
     debian|ubuntu|pop)
-       local dist_version_name=$(get_dist_version_name)
-       local dist_arch=$(dpkg --print-architecture)
-       ;;
+      local dist_version_name=$(get_dist_version_name)
+      local dist_arch=$(dpkg --print-architecture)
+      ;;
     *) # use dummy values on unsupported Linux distributions so the speed test can still be executed
-       local dist_name=ubuntu
-       local dist_version_name=bionic
-       #local dist_name=debian
-       #local dist_version_name=bookworm
-       local dist_arch=amd64
-       ;;
+      local dist_name=ubuntu
+      local dist_version_name=bionic
+      #local dist_name=debian
+      #local dist_version_name=bookworm
+      local dist_arch=amd64
+      ;;
   esac
 
   #
@@ -353,7 +352,7 @@ function find_fast_mirror() {
   local mirrors_with_speed=$(
     echo "$speedtest_mirrors" \
     | __xargs -P $((download_parallel)) -i bash -c \
-             "curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sSf -w '%{speed_download} {}\n' -o /dev/null {}ls-lR.gz 2>/dev/null || true; >&2 echo -n '.'" \
+          "curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sSf -w '%{speed_download} {}\n' -o /dev/null {}ls-lR.gz 2>/dev/null || true; >&2 echo -n '.'" \
     | sort -rg
   )
   >&2 echo "done"
