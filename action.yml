@@ -39,6 +39,7 @@ runs:
           if (set -x; curl -sSfL --retry 3 --max-time 6 https://raw.githubusercontent.com/${{ inputs.repo-name }}/${{ inputs.repo-branch }}/fast-apt-mirror.sh -o $HOME/fast-apt-mirror.sh); then
             bash $HOME/fast-apt-mirror.sh find --apply --verbose \
               --healthchecks ${{ inputs.healthchecks }} \
+              --ignore-sync-state \
               --speedtests   ${{ inputs.speedtests }} \
               --parallel     ${{ inputs.parallel }} \
               --sample-size  ${{ inputs.sample-size }} \

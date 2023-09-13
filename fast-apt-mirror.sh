@@ -192,24 +192,26 @@ function find_fast_mirror() {
       --speedtests)   assert_option_is_int "$1" "$2"; shift; local max_speedtests=$1 ;;
       --sample-size)  assert_option_is_int "$1" "$2"; shift; local sample_size_kb=$1 ;;
       --sample-time)  assert_option_is_int "$1" "$2"; shift; local sample_time_secs=$1 ;;
-      --apply)           local apply=true ;;
-      --exclude-current) local exclude_current=true ;;
-      --verbose)         local verbosity=$(( ${verbosity:-0} + 1 )) ;;
-      -+(v))             local verbosity=$(( ${verbosity:-0} + ${#1} - 1 )) ;;
+      --apply)             local apply=true ;;
+      --exclude-current)   local exclude_current=true ;;
+      --ignore-sync-state) local ignore_sync_state=true ;;
+      --verbose)           local verbosity=$(( ${verbosity:-0} + 1 )) ;;
+      -+(v))               local verbosity=$(( ${verbosity:-0} + ${#1} - 1 )) ;;
       --help)
         echo "Usage: $(basename "$0") find [OPTION]...";
         echo
         echo "$DESC_FIND"
         echo
         echo "Options:"
-        echo "     --apply            - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'"
-        echo "     --exclude-current  - If specified, don't include the current APT mirror in the speed tests."
-        echo "     --healthchecks N   - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20"
-        echo "     --speedtests N     - Maximum number of healthy mirrors to test for speed - default is 5"
-        echo " -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster."
-        echo "     --sample-size KB   - Number of kilobytes to download during the speed from each mirror - default is 200KB"
-        echo "     --sample-time SECS - Maximum number of seconds within the sample download from a mirror must finish - default is 3"
-        echo " -v, --verbose          - More output. Specify multiple times to increase verbosity."
+        echo "     --apply             - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'"
+        echo "     --exclude-current   - If specified, don't include the current APT mirror in the speed tests."
+        echo "     --healthchecks N    - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20"
+        echo "     --ignore-sync-state - Don't check up-to-dateness of mirrors as part of healthchecks"
+        echo "     --speedtests N      - Maximum number of healthy mirrors to test for speed - default is 5"
+        echo " -p, --parallel N        - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster."
+        echo "     --sample-size KB    - Number of kilobytes to download during the speed from each mirror - default is 200KB"
+        echo "     --sample-time SECS  - Maximum number of seconds within the sample download from a mirror must finish - default is 3"
+        echo " -v, --verbose           - More output. Specify multiple times to increase verbosity."
         return ;;
     esac
     shift
@@ -311,7 +313,6 @@ function find_fast_mirror() {
   #
   local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -t' ' -k1,1rn -k2) # sort by last modified date and URL
   local healthy_mirrors_date=${healthcheck_results_sorted_by_date%% *} # the last modified date of healthy up-to-date mirrors
-  local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep "^$healthy_mirrors_date " | cut -d" " -f2-)
   if [[ $verbosity -gt 0 ]]; then
     while IFS= read -r mirror; do
       local last_modified=${mirror%% *}
@@ -323,7 +324,13 @@ function find_fast_mirror() {
       esac
     done <<< "$healthcheck_results_sorted_by_date"
   fi
-  >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
+  if [[ ${ignore_sync_state:-} == "true" ]]; then
+    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep -v "^0 " | cut -d" " -f2-)
+    >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable"
+  else
+    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep "^$healthy_mirrors_date " | cut -d" " -f2-)
+    >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
+  fi
 
   #
   # select mirrors for the speed test
