@@ -2,20 +2,28 @@
 # SPDX-FileContributor: Sebastian Thomschke, Vegard IT GmbH
 # SPDX-License-Identifier: Apache-2.0
 #
-# https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
 name: Build
 
 on:
   push:
-    branches:
+    branches: # build all branches
     - '**'
-    tags-ignore:
+    tags-ignore: # don't build tags
     - '**'
     paths-ignore:
     - '**/*.md'
+    - '.editorconfig'
+    - '.git*'
     - '.github/*.yml'
     - '.semaphore/**/*'
   pull_request:
+    paths-ignore:
+    - '**/*.md'
+    - '.editorconfig'
+    - '.git*'
+    - '.github/*.yml'
+    - '.semaphore/**/*'
   workflow_dispatch:
     # https://github.blog/changelog/2020-07-06-github-actions-manual-triggers-with-workflow_dispatch/
     inputs:
@@ -124,12 +132,12 @@ jobs:
         - debian:testing-slim
         - debian:stable-slim
         - debian:bookworm-slim
-        - debian:buster-slim
         - debian:bullseye-slim
+        - debian:buster-slim
         - "bitnami/minideb:latest"
         - "bitnami/minideb:bookworm"
-        - "bitnami/minideb:buster"
         - "bitnami/minideb:bullseye"
+        - "bitnami/minideb:buster"
         - "kalilinux/kali-last-release:latest"
         - ubuntu:devel
         - ubuntu:latest
