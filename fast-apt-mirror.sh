@@ -449,7 +449,7 @@ function set_mirror() {
 
 
 #
-# main enty point
+# main entry point
 #
 case ${1:-} in
   find)    shift; find_fast_mirror "$@" ;;
