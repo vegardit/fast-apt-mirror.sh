@@ -136,7 +136,7 @@ function get_dist_name() {
             mirror_url2=http://ftp.nl.debian.org/debian
             ;;
     ubuntu) mirror_url1=http://archive.ubuntu.com/ubuntu
-            mirror_url2=http://artfiles.org/ubuntu
+            mirror_url2=https://artfiles.org/ubuntu
             ;;
     *) skip ;;
   esac
