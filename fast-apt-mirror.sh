@@ -177,7 +177,8 @@ shopt -s extglob
 function find_fast_mirror() {
   if ! hash curl &>/dev/null; then
     >&2 echo "INFO: Required command 'curl' not found, trying to install it..."
-    __sudo apt-get update && __sudo apt-get install -y --no-install-recommends curl ca-certificates || return $RC_MISC_ERROR
+    __sudo apt-get -o Acquire::http::Timeout=10 update && \
+    __sudo apt-get -o Acquire::http::Timeout=10 install -y --no-install-recommends curl ca-certificates || return $RC_MISC_ERROR
   fi
 
   local start_at=$(date +%s)
@@ -441,7 +442,7 @@ function set_mirror() {
       -e "s|${current_mirror[0]} |$new_mirror |g" \
       -e "s|${current_mirror[0]}\t|$new_mirror\t|g" \
       "${current_mirror[1]}"
-    __sudo apt-get update
+    __sudo apt-get -o Acquire::http::Timeout=10 update
     echo "Successfully changed mirror from [${current_mirror[0]}] to [$new_mirror] in (${current_mirror[1]})"
   fi
 }
