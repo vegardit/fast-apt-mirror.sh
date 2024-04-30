@@ -140,8 +140,16 @@ function get_current_mirror() {
   local current_mirror_url=''
   local current_mirror_cfgfile
   case $dist_name in
-    debian)     current_mirror_cfgfile='/etc/apt/sources.list.d/debian.sources' ;;
-    ubuntu|pop) current_mirror_cfgfile='/etc/apt/sources.list.d/system.sources' ;;
+    debian)
+        current_mirror_cfgfile='/etc/apt/sources.list.d/debian.sources'
+      ;;
+    ubuntu|pop)
+        if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then # Ubuntu 24+
+          current_mirror_cfgfile='/etc/apt/sources.list.d/ubuntu.sources'
+        else
+          current_mirror_cfgfile='/etc/apt/sources.list.d/system.sources'
+        fi
+      ;;
   esac
   current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_cfgfile")
 
