@@ -104,8 +104,18 @@ function matches() {
   [[ $text =~ $pattern ]]
 }
 
+function unique() {
+  # https://stackoverflow.com/a/11532197/5116073
+  awk '!x[$0]++'
+}
+
+function max_lines() {
+  # head variant that does not risk raising SIGPIPE broken pipe
+  awk "NR<=$1"
+}
+
 function read_main_mirror_from_deb822_file() {
-  # https://repolib.readthedocs.io/en/latest/deb822-format.html
+  # https://repolib.readthedocs.io/en/latest/deb822-format.html#deb822-style-format
   file=$1
   [[ -f $file ]] || return 0
   local line mirror_uri='' mirror_main=''
@@ -137,7 +147,6 @@ function get_current_mirror() {
        ;;
   esac
 
-  local current_mirror_url=''
   local current_mirror_cfgfile
   case $dist_name in
     debian)
@@ -151,7 +160,7 @@ function get_current_mirror() {
         fi
       ;;
   esac
-  current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_cfgfile")
+  local current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_cfgfile")
 
   if [[ -z $current_mirror_url ]]; then
     if [[ -f /etc/apt/sources.list ]]; then
@@ -250,7 +259,7 @@ function find_fast_mirror() {
   #
   # determine the current APT mirror
   #
-  local current_mirror=$(get_current_mirror | head -n 1 || true)
+  local current_mirror=$(get_current_mirror | max_lines 1 || true)
 
   #
   # download mirror lists
@@ -260,43 +269,41 @@ function find_fast_mirror() {
   case $dist_name in
     debian)
       # see https://deb.debian.org/
-      preferred_mirrors+=("$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}")")
+      local reference_mirror=$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}")
       local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/')
       local last_modified_path="/dists/${dist_version_name}-updates/main/Contents-${dist_arch}.gz"
       ;;
     ubuntu|pop)
+      local reference_mirror=http://archive.ubuntu.com/ubuntu/
       local mirrors=$(curl --max-time 5 -sSfL http://mirrors.ubuntu.com/mirrors.txt)
       local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       ;;
   esac
+  preferred_mirrors+=("$reference_mirror")
   mirrors=$(echo "$mirrors" | sort -u)
 
   #
   # ignore or enforce inclusion of current_mirror
   #
   if [[ -n $current_mirror ]]; then
-    if [[ ${exclude_current:-} == "true" ]]; then
-      mirrors=$(echo "$mirrors" | grep -v "$current_mirror")
-    else
-      preferred_mirrors+=("$current_mirror")
-    fi
+    preferred_mirrors+=("$current_mirror")
   fi
 
   #
   # select preferred plus random mirros
   #
   if [[ ${#preferred_mirrors[@]} -gt 0 ]]; then
-    local preferred_mirror
-    for preferred_mirror in "${preferred_mirrors[@]}"; do
-      mirrors=$(echo "$mirrors" | grep -v "$preferred_mirror")
-    done
-    mirrors=$(printf "%s\n" "${preferred_mirrors[@]}")$'\n'$(echo "$mirrors" | shuf -n $(( max_healthchecks - ${#preferred_mirrors[@]} )))
+    mirrors=$(printf "%s\n" "${preferred_mirrors[@]}")$'\n'$(echo "$mirrors" | shuf)
   else
-    mirrors=$(echo "$mirrors" | shuf -n "$max_healthchecks")
+    mirrors=$(echo "$mirrors" | shuf)
   fi
+  if [[ -n $current_mirror && ${exclude_current:-} == "true" ]]; then
+    mirrors=$(echo "$mirrors" | grep -v "$current_mirror")
+  fi
+  mirrors=$(echo "$mirrors" | unique | max_lines "$max_healthchecks" | sort )
+
   >&2 echo "done"
 
-  mirrors=$(echo "$mirrors" | sort)
   if [[ $verbosity -gt 1 ]]; then
     for mirror in $mirrors; do >&2 echo " -> $mirror"; done
   fi
@@ -320,14 +327,20 @@ function find_fast_mirror() {
   # filter out broken and outdated mirrors
   #
   local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -t' ' -k1,1rn -k2) # sort by last modified date and URL
-  local healthy_mirrors_date=${healthcheck_results_sorted_by_date%% *} # the last modified date of healthy up-to-date mirrors
+
+  # determine the update time of a healthy mirror by first checking the reference mirror's modification date
+  local healthy_mirrors_date=$(echo "$healthcheck_results_sorted_by_date" | grep -E "[0-9]+ $reference_mirror" | awk 'NR==1 { print $1 }' || true)
+  if [[ -z $healthy_mirrors_date ]]; then
+    # fall back to last modified date of newest mirror found
+    healthy_mirrors_date=${healthcheck_results_sorted_by_date%% *}
+  fi
   if [[ $verbosity -gt 0 ]]; then
     while IFS= read -r mirror; do
       local last_modified=${mirror%% *}
       local mirror_url=${mirror#* }
       case $last_modified in
         "$healthy_mirrors_date") >&2 echo " -> UP-TO-DATE (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url" ;;
-        0)                       >&2 echo " ->                         n/a                          $mirror_url" ;;
+        0)                       >&2 echo " ->                         n/a                         $mirror_url" ;;
         *)                       >&2 echo " -> outdated   (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url" ;;
       esac
     done <<< "$healthcheck_results_sorted_by_date"
@@ -351,8 +364,7 @@ function find_fast_mirror() {
       fi
     done
   fi
-  # awk '!x[$0]++' -> https://stackoverflow.com/a/11532197/5116073
-  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | awk '!x[$0]++' | head -n "$max_speedtests")
+  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | unique | max_lines "$max_speedtests")
 
   #
   # test download speed and select fastest mirror
@@ -462,7 +474,7 @@ function set_mirror() {
 case ${1:-} in
   find)    shift; find_fast_mirror "$@" ;;
   set)     shift; set_mirror "$@" ;;
-  current) shift; get_current_mirror "$@" | head -n 1 ;;
+  current) shift; get_current_mirror "$@" | max_lines 1 ;;
   *) [[ "${1:-}" == "--help" ]] || ( echo "ERROR: Required command missing"; echo )
      echo "Usage: $(basename "$0") COMMAND";
      echo
