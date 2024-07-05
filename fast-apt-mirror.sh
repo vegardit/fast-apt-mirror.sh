@@ -209,6 +209,7 @@ function find_fast_mirror() {
       --speedtests)   assert_option_is_int "$1" "$2"; shift; local max_speedtests=$1 ;;
       --sample-size)  assert_option_is_int "$1" "$2"; shift; local sample_size_kb=$1 ;;
       --sample-time)  assert_option_is_int "$1" "$2"; shift; local sample_time_secs=$1 ;;
+      --country)           shift; local country=${1^^} ;;
       --apply)             local apply=true ;;
       --exclude-current)   local exclude_current=true ;;
       --ignore-sync-state) local ignore_sync_state=true ;;
@@ -222,6 +223,7 @@ function find_fast_mirror() {
         echo "Options:"
         echo "     --apply             - Replaces the currently configured APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'"
         echo "     --exclude-current   - If specified, don't include the currently configured APT mirror in the speed tests."
+        echo "     --country CODE      - The country code to use for selecting mirrors. NOTE: Only applies to ubuntu based distro. - default is 'mirrors'"
         echo "     --healthchecks N    - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20"
         echo "     --ignore-sync-state - Don't check up-to-dateness of mirrors as part of healthchecks"
         echo "     --speedtests N      - Maximum number of healthy mirrors to test for speed - default is 5"
@@ -240,6 +242,7 @@ function find_fast_mirror() {
   local sample_time_secs=${sample_time_secs:-3}
   local max_healthchecks=${max_healthchecks:-20}
   local verbosity=${verbosity:-0}
+  local country=${country:-"mirrors"}
 
   local dist_name=$(get_dist_name)
   case $dist_name in
@@ -275,7 +278,7 @@ function find_fast_mirror() {
       ;;
     ubuntu|pop)
       local reference_mirror=http://archive.ubuntu.com/ubuntu/
-      local mirrors=$(curl --max-time 5 -sSfL http://mirrors.ubuntu.com/mirrors.txt)
+      local mirrors=$(curl --max-time 5 -sSfL http://mirrors.ubuntu.com/$country.txt)
       local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       ;;
   esac
