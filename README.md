@@ -113,12 +113,13 @@ Determines and prints the URL of a fast APT mirror and optionally activates it.
 To perform the connectivity and speed tests, the `curl` command must be installed.
 
 Usage:
-```yml
+```
 fast-apt-mirror.sh find [OPTION]...
 
 Options:
      --apply            - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'
      --exclude-current  - If specified, don't include the current APT mirror in the speed tests.
+     --country CODE     - The country code to use for selecting mirrors. NOTE: Only applies to ubuntu based distro. - default is 'mirrors'
      --healthchecks N   - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20
      --speedtests N     - Maximum number of healthy mirrors to test for speed - default is 5
  -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster.
