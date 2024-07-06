@@ -278,7 +278,7 @@ function find_fast_mirror() {
       ;;
     ubuntu|pop)
       local reference_mirror=http://archive.ubuntu.com/ubuntu/
-      local mirrors=$(curl --max-time 5 -sSfL http://mirrors.ubuntu.com/$country.txt)
+      local mirrors=$(curl --max-time 5 -sSfL "http://mirrors.ubuntu.com/$country.txt")
       local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       ;;
   esac
