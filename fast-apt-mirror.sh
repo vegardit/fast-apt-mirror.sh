@@ -247,10 +247,8 @@ function find_fast_mirror() {
       local dist_arch=$(dpkg --print-architecture)
       ;;
     *) # use dummy values on unsupported Linux distributions so the speed test can still be executed
-      local dist_name=ubuntu
-      local dist_version_name=bionic
-      #local dist_name=debian
-      #local dist_version_name=bookworm
+      local dist_name=debian
+      local dist_version_name=stable
       local dist_arch=amd64
       ;;
   esac
