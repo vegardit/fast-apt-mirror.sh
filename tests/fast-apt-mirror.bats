@@ -58,7 +58,7 @@ function get_dist_name() {
 ##############################
 @test "current: Show current URL" {
   case $(get_dist_name) in
-    debian|ubuntu)
+    debian|kali|ubuntu)
       assert_exitcode $RC_OK current
       assert_regex "$output" '(https?|ftp)://'
       refute_regex "$output" 'ERROR:'
@@ -98,7 +98,7 @@ function get_dist_name() {
 
 @test "find: Find and apply mirror" {
   case $(get_dist_name) in
-    debian|ubuntu) ;;
+    debian|kali|ubuntu) ;;
     *) skip ;;
   esac
   assert_exitcode $RC_OK find -vvv --apply --exclude-current
@@ -134,6 +134,9 @@ function get_dist_name() {
   case $(get_dist_name) in
     debian) mirror_url1=http://ftp.de.debian.org/debian
             mirror_url2=http://ftp.nl.debian.org/debian
+            ;;
+    kali)   mirror_url1=https://mirror.netcologne.de/kali
+            mirror_url2=https://ftp.halifax.rwth-aachen.de/kali
             ;;
     ubuntu) mirror_url1=http://archive.ubuntu.com/ubuntu
             mirror_url2=https://artfiles.org/ubuntu

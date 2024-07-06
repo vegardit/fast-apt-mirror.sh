@@ -140,7 +140,7 @@ function get_current_mirror() {
   >&2 echo -n "Current mirror: "
   local dist_name=$(get_dist_name)
   case $dist_name in
-    debian|ubuntu|pop)
+    debian|kali|ubuntu|pop)
        ;;
     *) >&2 echo "unknown (Unsupported operating system: $dist_name)"
        return $RC_MISC_ERROR
@@ -149,9 +149,8 @@ function get_current_mirror() {
 
   local current_mirror_cfgfile
   case $dist_name in
-    debian)
-        current_mirror_cfgfile='/etc/apt/sources.list.d/debian.sources'
-      ;;
+    debian) current_mirror_cfgfile='/etc/apt/sources.list.d/debian.sources' ;;
+    kali)   current_mirror_cfgfile='/etc/apt/sources.list' ;;
     ubuntu|pop)
         if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then # Ubuntu 24+
           current_mirror_cfgfile='/etc/apt/sources.list.d/ubuntu.sources'
@@ -243,7 +242,7 @@ function find_fast_mirror() {
 
   local dist_name=$(get_dist_name)
   case $dist_name in
-    debian|ubuntu|pop)
+    debian|kali|ubuntu|pop)
       local dist_version_name=$(get_dist_version_name)
       local dist_arch=$(dpkg --print-architecture)
       ;;
@@ -272,6 +271,11 @@ function find_fast_mirror() {
       local reference_mirror=$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}")
       local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/')
       local last_modified_path="/dists/${dist_version_name}-updates/main/Contents-${dist_arch}.gz"
+      ;;
+    kali)
+      local reference_mirror=https://http.kali.org/
+      local mirrors=$(curl -sSfL https://http.kali.org/README?mirrorlist | grep -oP '(?<=README">)(https.*)(?=</a)')
+      local last_modified_path="/dists/${dist_version_name}/main/Contents-${dist_arch}.gz"
       ;;
     ubuntu|pop)
       local reference_mirror=http://archive.ubuntu.com/ubuntu/
@@ -433,7 +437,7 @@ function set_mirror() {
 
   dist_name=$(get_dist_name)
   case $dist_name in
-    debian|ubuntu|pop) ;;
+    debian|kali|ubuntu|pop) ;;
     *) echo "ERROR: Cannot set APT mirror: unsupported operating system: $dist_name"; return $RC_MISC_ERROR ;;
   esac
 
