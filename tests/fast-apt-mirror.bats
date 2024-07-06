@@ -88,7 +88,7 @@ function get_dist_name() {
 }
 
 @test "find: Find mirror if executed with arguments" {
-  assert_exitcode $RC_OK find --sample-size 10 --healthchecks 8 --ignore-sync-state --speedtests 2
+  assert_exitcode $RC_OK find --sample-size 10 --healthchecks 8 --ignore-sync-state --speedtests 2 --country DE
   assert_regex "$output" 'Randomly selecting 8 mirrors...done'
   assert_regex "$output" 'Speed testing 2 of the available'
   assert_regex "$output" '(sample download size: 10KB)'
@@ -101,7 +101,7 @@ function get_dist_name() {
     debian|kali|ubuntu) ;;
     *) skip ;;
   esac
-  assert_exitcode $RC_OK find -vvv --apply --exclude-current
+  assert_exitcode $RC_OK find -vvv --apply --exclude-current --country DE
   >&3 echo "|-> ${lines[-2]}"
   assert_regex "$output" 'Creating backup /etc/apt/(sources\.list|apt-mirrors\.txt).*.save'
   assert_regex "$output" "Changing mirror from \[.*\] to \[.*\]"
