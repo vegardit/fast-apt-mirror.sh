@@ -131,12 +131,12 @@ function read_main_mirror_from_deb822_file() {
 }
 
 
-############################
-# returns two lines:
-# 1. mirror URL
-# 2. config file where the mirror URL was defined
-############################
 function get_current_mirror() {
+  ############################
+  # returns two lines:
+  # 1. mirror URL
+  # 2. config file where the mirror URL was defined
+  ############################
   >&2 echo -n "Current mirror: "
   local dist_name=$(get_dist_name)
   case $dist_name in
@@ -164,13 +164,16 @@ function get_current_mirror() {
   if [[ -z $current_mirror_url ]]; then
     if [[ -f /etc/apt/sources.list ]]; then
        if grep -q -E "^deb\s+mirror\+file:/etc/apt/apt-mirrors.txt\s+.*\s+main" /etc/apt/sources.list; then
-         current_mirror_url=$(awk 'NR==1 { print $1 }' /etc/apt/apt-mirrors.txt)
          current_mirror_cfgfile=/etc/apt/apt-mirrors.txt
+         current_mirror_url=$(awk 'NR==1 { print $1 }' "$current_mirror_cfgfile")
        else
-         current_mirror_url=$(grep -E "^deb\s+(https?|ftp)://.*\s+main" /etc/apt/sources.list | awk 'NR==1 { print $2 }')
          current_mirror_cfgfile=/etc/apt/sources.list
+         current_mirror_url=$(grep -E "^deb\s+(https?|ftp)://.*\s+main" "$current_mirror_cfgfile" | awk 'NR==1 { print $2 }')
        fi
     fi
+  elif [[ $current_mirror_url == "mirror+file:"* ]]; then
+    current_mirror_cfgfile=${current_mirror_url/mirror+file:/}
+    current_mirror_url=$(awk 'NR==1 { print $1 }' "${current_mirror_url/mirror+file:/}")
   fi
 
   if [[ -z $current_mirror_url ]]; then

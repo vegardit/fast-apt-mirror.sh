@@ -80,13 +80,6 @@ jobs:
       uses: actions/checkout@v4  # https://github.com/actions/checkout
 
 
-    - name: "Linux: Configure APT"
-      uses: ./
-      with:
-        repo-name:   ${{ github.repository }}
-        repo-branch: ${{ github.ref_name }}
-
-
     - name: Run shellcheck
       run: bash tests/run-shellcheck.sh
 
@@ -107,6 +100,7 @@ jobs:
         fi
         sudo gem install simplecov-console
 
+
     - name: Run tests
       timeout-minutes: 5
       run: |
@@ -116,6 +110,13 @@ jobs:
         else
           bash tests/run-tests.sh
         fi
+
+
+    - name: "Test fast-apt-mirror.sh Action"
+      uses: ./
+      with:
+        repo-name:   ${{ github.repository }}
+        repo-branch: ${{ github.ref_name }}
 
 
     ##################################################
