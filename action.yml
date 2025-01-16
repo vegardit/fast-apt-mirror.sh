@@ -17,6 +17,8 @@ inputs:
   sample-size:      { default: "1024", description: "Number of kilobytes to download during the speed from each mirror." }
   sample-time:      { default:    "3", description: "Maximum number of seconds within the sample download from a mirror must finish." }
   exclude-current:  { default:    "false", description: "Don't include the current APT mirror in the speed tests." }
+  country:          { default:    "", description: "The country code to use for selecting mirrors. NOTE: Only applies to Ubuntu based distros. Defaults to http://mirrors.ubuntu.com/mirrors.txt"" }
+
   
   repo-name:   { default: "vegardit/fast-apt-mirror.sh", description: "Repository containing the fast-apt-mirror.sh script" }
   repo-branch: { default: "v1", description: "Version (i.e. github branch) of the fast-apt-mirror.sh script to use" }
@@ -45,6 +47,7 @@ runs:
               --parallel     ${{ inputs.parallel }} \
               --sample-size  ${{ inputs.sample-size }} \
               --sample-time  ${{ inputs.sample-time }} \
+              --country      ${{ inputs.country }} \
               ${{ inputs.exclude-current && '--exclude-current' || '' }}
           fi || exit 0 # don't fail action if APT mirror detection failed for whatever reason
         fi
