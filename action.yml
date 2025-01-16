@@ -33,6 +33,16 @@ runs:
         echo "::group::Linux: Configure fast APT mirror"
         set -euo pipefail
 
+        # Step to get country code if not provided
+        if [[ -z "${{ inputs.country }}" ]]; then
+          echo "No country code provided, retrieving from public IP..."
+          IP_ADDRESS=$(curl -s http://checkip.amazonaws.com)
+          COUNTRY_CODE=$(curl -s http://ip-api.com/json/$IP_ADDRESS | jq -r '.countryCode')
+          echo "Detected country code: $COUNTRY_CODE"
+        else
+          COUNTRY_CODE="${{ inputs.country }}"
+        fi
+
         echo 'APT::Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-acquire-retries
 
         if [[ "${{ env.ACT }}" != "true" ]]; then
@@ -47,7 +57,7 @@ runs:
               --parallel     ${{ inputs.parallel }} \
               --sample-size  ${{ inputs.sample-size }} \
               --sample-time  ${{ inputs.sample-time }} \
-              --country      ${{ inputs.country }} \
+              --country      "$COUNTRY_CODE" \ 
               ${{ inputs.exclude-current && '--exclude-current' || '' }}
           fi || exit 0 # don't fail action if APT mirror detection failed for whatever reason
         fi
