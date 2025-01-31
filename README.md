@@ -45,6 +45,8 @@ jobs:
         parallel:       2 # Number of parallel speed tests
         sample-size: 1024 # Number of kilobytes to download during the speed from each mirror
         sample-time:    3 # Maximum number of seconds within the sample download from a mirror must finish
+        country:       "" # The country code for selecting Ubuntu mirrors. If not set, defaults to http://mirrors.ubuntu.com/mirrors.txt
+        exclude-current: false # If set to "true", don't include the current APT mirror in the speed tests
 ```
 
 The action output will look like this:
@@ -117,14 +119,16 @@ Usage:
 fast-apt-mirror.sh find [OPTION]...
 
 Options:
-     --apply            - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'
-     --exclude-current  - If specified, don't include the current APT mirror in the speed tests.
-     --healthchecks N   - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20
-     --speedtests N     - Maximum number of healthy mirrors to test for speed - default is 5
- -p, --parallel N       - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster.
-     --sample-size KB   - Number of kilobytes to download during the speed from each mirror - default is 200KB
-     --sample-time SECS - Maximum number of seconds within the sample download from a mirror must finish - default is 3
- -v, --verbose          - More output. Specify multiple times to increase verbosity.
+     --apply             - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'
+     --country CODE      - The country code to use for selecting mirrors. NOTE: Only applies to Ubuntu based distros. Defaults to http://mirrors.ubuntu.com/mirrors.txt
+     --exclude-current   - If specified, don't include the current APT mirror in the speed tests.
+     --healthchecks N    - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20
+     --ignore-sync-state - Don't check up-to-dateness of mirrors as part of healthchecks
+     --speedtests N      - Maximum number of healthy mirrors to test for speed - default is 5
+ -p, --parallel N        - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster.
+     --sample-size KB    - Number of kilobytes to download during the speed from each mirror - default is 200KB
+     --sample-time SECS  - Maximum number of seconds within the sample download from a mirror must finish - default is 3
+ -v, --verbose           - More output. Specify multiple times to increase verbosity.
 ```
 
 Finding a fast mirror:
