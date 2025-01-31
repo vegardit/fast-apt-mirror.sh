@@ -45,6 +45,7 @@ jobs:
         parallel:       2 # Number of parallel speed tests
         sample-size: 1024 # Number of kilobytes to download during the speed from each mirror
         sample-time:    3 # Maximum number of seconds within the sample download from a mirror must finish
+        exclude-current: ${{ false }} # If set to ${{ true }}, excludes current mirror from consideration
 ```
 
 The action output will look like this:
