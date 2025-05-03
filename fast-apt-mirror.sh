@@ -79,13 +79,13 @@ function __sudo() {
 function assert_option_is_int() {
   if ! [ "$2" -eq "$2" ] 2>/dev/null; then
     echo "Option $1: '$2' is not a valid integer"
-    exit 1
+    exit $RC_INVALID_ARGS
   fi
 }
 
 function get_dist_name() {
   if compgen -G "/etc/*-release" >/dev/null; then
-    cat /etc/*-release | grep "^ID=" | cut -d= -f2
+    awk -F= '/^ID=/ { print $2; exit }' /etc/*-release
   else
     echo "$OSTYPE"
   fi
@@ -95,7 +95,7 @@ function get_dist_version_name() {
   if compgen -G "/etc/*-release" >/dev/null; then
     cat /etc/*-release | grep VERSION_CODENAME | cut -d= -f2
   else
-    echo "unkown"
+    echo "unknown"
   fi
 }
 
@@ -116,7 +116,7 @@ function max_lines() {
 
 function read_main_mirror_from_deb822_file() {
   # https://repolib.readthedocs.io/en/latest/deb822-format.html#deb822-style-format
-  file=$1
+  local file=$1
   [[ -f $file ]] || return 0
   local line mirror_uri='' mirror_main=''
   while IFS= read -r line; do
@@ -184,7 +184,7 @@ function get_current_mirror() {
   >&2 echo "$current_mirror_url ($current_mirror_cfgfile)"
 
   # if function is piped or output is caputured write the selected APT mirror to STDOUT
-  if [[ -p /dev/stdout ]]; then
+  if [[ ! -t 1 ]]; then
     echo "$current_mirror_url"
     echo "$current_mirror_cfgfile"
   fi
@@ -406,7 +406,7 @@ function find_fast_mirror() {
   #
   # if function output is redirected/captured then write the selected mirror to STDOUT
   #
-  if [[ -p /dev/stdout ]]; then
+  if [[ ! -t 1 ]]; then
     echo "$fastest_mirror"
   fi
 }
