@@ -2,7 +2,7 @@
 # SPDX-FileContributor: Sebastian Thomschke, Vegard IT GmbH
 # SPDX-License-Identifier: Apache-2.0
 #
-# https://docs.github.com/en/actions/creating-actions/creating-a-composite-action
+# https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action
 name: Configure fast APT mirror
 description: Configures a fast APT mirror in Ubuntu runners, e.g. in case azure.archive.ubuntu.com is slow or unreachable.
 author: Vegard IT GmbH (https://vegardit.com)
