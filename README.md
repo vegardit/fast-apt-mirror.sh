@@ -3,7 +3,7 @@
 [![Build](https://github.com/vegardit/fast-apt-mirror.sh/actions/workflows/build.yml/badge.svg)](https://github.com/vegardit/fast-apt-mirror.sh/actions/workflows/build.yml)
 [![Build Status](https://vegardit.semaphoreci.com/badges/fast-apt-mirror.sh/branches/v1.svg?key=895f50fb-c056-41dc-9580-d7cdfac023df "Semaphore CI")](https://vegardit.semaphoreci.com/projects/fast-apt-mirror.sh)
 [![License](https://img.shields.io/github/license/vegardit/fast-apt-mirror.sh.svg?label=license)](#license)
-[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](CODE_OF_CONDUCT.md)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.1%20adopted-ff69b4.svg)](CODE_OF_CONDUCT.md)
 
 
 **Feedback and high-quality pull requests are highly welcome!**
