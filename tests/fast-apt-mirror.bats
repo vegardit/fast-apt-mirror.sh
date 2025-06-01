@@ -139,7 +139,7 @@ function get_dist_name() {
             mirror_url2=https://ftp.halifax.rwth-aachen.de/kali
             ;;
     ubuntu) mirror_url1=http://archive.ubuntu.com/ubuntu
-            mirror_url2=https://artfiles.org/ubuntu
+            mirror_url2=https://ftp.uni-stuttgart.de/ubuntu
             ;;
     *) skip ;;
   esac
