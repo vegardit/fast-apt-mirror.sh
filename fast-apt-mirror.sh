@@ -28,7 +28,7 @@ set -uo pipefail
 
 readonly RC_INVALID_ARGS=3
 readonly RC_MISC_ERROR=222
-
+declare -ar SUPPORTED_DISTRO_NAMES=("debian" "kali" "ubuntu" "pop")
 
 #################################################
 # configure logging/error reporting
@@ -85,7 +85,19 @@ function assert_option_is_int() {
 
 function get_dist_name() {
   if compgen -G "/etc/*-release" >/dev/null; then
-    awk -F= '/^ID=/ { print $2; exit }' /etc/*-release
+    readarray -t discovered_dist_names < <(awk -F= '/^ID=/ { print $2 }' /etc/*-release)
+    local found_distro_name=1
+    for discovered_name in "${discovered_dist_names[@]}"; do
+      for supported_name in "${SUPPORTED_DISTRO_NAMES[@]}"; do
+        if [[ "$discovered_name" = "$supported_name" ]]; then
+          found_distro_name=0
+          echo "$discovered_name"
+        fi
+      done
+    done
+    if [[ "$found_distro_name" = "1" ]]; then
+      echo "$OSTYPE"
+    fi
   else
     echo "$OSTYPE"
   fi
