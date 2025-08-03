@@ -6,6 +6,7 @@
 # https://github.com/vegardit/fast-apt-mirror.sh/
 #
 # shellcheck disable=SC2155 # (warning): Declare and assign separately to avoid masking return values
+# shellcheck disable=SC1091 # (info): Not following: /etc/(lsb|os)-release was not specified as input
 
 ###################
 # script init
@@ -84,19 +85,31 @@ function assert_option_is_int() {
 }
 
 function get_dist_name() {
-  if compgen -G "/etc/*-release" >/dev/null; then
-    awk -F= '/^ID=/ { print $2; exit }' /etc/*-release
-  else
-    echo "$OSTYPE"
+  if [ -r /etc/os-release ]; then
+    (source /etc/os-release; printf '%s\n' "${ID,,}")
+    return
   fi
+
+  if [ -r /etc/lsb-release ]; then # old Ubuntu, Mint…
+    (source /etc/lsb-release; printf '%s\n' "${DISTRIB_ID,,}")
+    return
+  fi
+
+  printf '%s\n' "${OSTYPE:-unknown}"
 }
 
 function get_dist_version_name() {
-  if compgen -G "/etc/*-release" >/dev/null; then
-    cat /etc/*-release | grep VERSION_CODENAME | cut -d= -f2
-  else
-    echo "unknown"
+  if [ -r /etc/os-release ]; then
+    (source /etc/os-release; printf '%s\n' "${VERSION_CODENAME:-${VERSION_ID:-unknown}}")
+    return
   fi
+
+  if [ -r /etc/lsb-release ]; then
+    (source /etc/lsb-release; printf '%s\n' "${DISTRIB_CODENAME:-${DISTRIB_RELEASE:-unknown}}")
+    return
+  fi
+
+  printf 'unknown\n'
 }
 
 function matches() {
