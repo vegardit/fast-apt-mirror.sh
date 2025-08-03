@@ -2,11 +2,12 @@
 # SPDX-FileContributor: Sebastian Thomschke, Vegard IT GmbH
 # SPDX-License-Identifier: Apache-2.0
 #
-# https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 name: Build
 
 on:
   schedule:
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
     - cron: '0 15 1 * *'
   push:
     branches-ignore:  # build all branches except:
@@ -29,7 +30,7 @@ on:
     - '.github/workflows/stale.yml'
     - '.semaphore/**/*'
   workflow_dispatch:
-    # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#workflow_dispatch
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch
     inputs:
       debug-with-ssh:
         description: "Start an SSH session for debugging purposes at the end of the build:"
@@ -136,11 +137,11 @@ jobs:
 
         when="${{ inputs.debug-with-ssh }}"
 
-        if [[ $when == "always" ]] || [[ "$job_info" =~ .*$job_filter_pattern.* ]] && case "${{ job.status }}" in
+        if [[ $when == "always" ]] || { [[ "$job_info" =~ .*$job_filter_pattern.* ]] && case "${{ job.status }}" in
           success)   [[ $when == "always" ]] ;;
           cancelled) [[ $when == "on_failure_or_cancelled" ]] ;;
           failure)   [[ $when == "on_failure"* ]] ;;
-        esac; then
+        esac }; then
           echo "start_ssh_session=true" | tee -a "$GITHUB_OUTPUT"
         fi
 
@@ -165,11 +166,9 @@ jobs:
         - debian:stable-slim
         - debian:bookworm-slim
         - debian:bullseye-slim
-        - debian:buster-slim
         - "bitnami/minideb:latest"
         - "bitnami/minideb:bookworm"
         - "bitnami/minideb:bullseye"
-        - "bitnami/minideb:buster"
         - "kalilinux/kali-last-release:latest"
         - ubuntu:devel
         - ubuntu:latest
