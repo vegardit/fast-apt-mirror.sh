@@ -138,8 +138,15 @@ function get_dist_name() {
     kali)   mirror_url1=https://mirror.netcologne.de/kali
             mirror_url2=https://ftp.halifax.rwth-aachen.de/kali
             ;;
-    ubuntu) mirror_url1=http://archive.ubuntu.com/ubuntu
-            mirror_url2=https://ftp.uni-stuttgart.de/ubuntu
+    ubuntu)
+            arch=$(dpkg --print-architecture 2>/dev/null || echo amd64)
+            if [[ $arch == arm64 || $arch == armhf ]]; then
+              mirror_url1=http://ports.ubuntu.com/ubuntu-ports
+              mirror_url2=http://ftp.tu-chemnitz.de/pub/linux/ubuntu-ports
+            else
+              mirror_url1=http://archive.ubuntu.com/ubuntu
+              mirror_url2=https://ftp.uni-stuttgart.de/ubuntu
+            fi
             ;;
     *) skip ;;
   esac
@@ -150,7 +157,8 @@ function get_dist_name() {
   >&3 echo "|-> ${lines[-1]}"
   assert_regex "$output" 'Creating backup /etc/apt/(sources\.list|apt-mirrors\.txt).*.save'
   assert_regex "$output" "Changing mirror from \[.*\] to \[$mirror_url2\]"
-  assert_regex "$output" "(Get|Hit):[1-9]+ $mirror_url2"
+  mirror_url2_base=${mirror_url2%/}
+  assert_regex "$output" "(Get|Hit):[1-9]+ $mirror_url2_base"
   assert_regex "$output" "Reading package lists..."
   refute_regex "$output" 'ERROR:'
 }

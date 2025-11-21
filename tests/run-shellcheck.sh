@@ -18,14 +18,22 @@ case "$(uname -s)" in
     if [[ ! -f shellcheck/shellcheck ]]; then
       rm -rf shellcheck
       mkdir shellcheck
-      curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJ --strip-components=1 -C shellcheck
+      case "$(uname -m)" in
+        aarch64|arm64) arch="aarch64" ;;
+        *) arch="x86_64" ;;
+      esac
+      curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.${arch}.tar.xz" | tar -xJ --strip-components=1 -C shellcheck
     fi
     ;;
   Darwin*)
     if [[ ! -f shellcheck/shellcheck ]]; then
       rm -rf shellcheck
       mkdir shellcheck
-      curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.darwin.x86_64.tar.xz" | tar -xJ --strip-components=1 -C shellcheck
+      case "$(uname -m)" in
+        aarch64|arm64) arch="aarch64" ;;
+        *) arch="x86_64" ;;
+      esac
+      curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.darwin.${arch}.tar.xz" | tar -xJ --strip-components=1 -C shellcheck
     fi
     ;;
   CYGWIN*|MINGW*)

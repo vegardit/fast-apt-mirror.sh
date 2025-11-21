@@ -294,8 +294,16 @@ function find_fast_mirror() {
       local last_modified_path="/dists/${dist_version_name}/main/Contents-${dist_arch}.gz"
       ;;
     ubuntu|pop)
-      local reference_mirror=http://archive.ubuntu.com/ubuntu/
+      if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
+        local reference_mirror=http://ports.ubuntu.com/ubuntu-ports/
+      else
+        local reference_mirror=http://archive.ubuntu.com/ubuntu/
+      fi
       local mirrors=$(curl --max-time 5 -sSfL "http://mirrors.ubuntu.com/${country:-mirrors}.txt")
+      # Ensure ARM architectures consider ports.ubuntu.com even if not in mirrors list
+      if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
+        mirrors+=$'\n'"http://ports.ubuntu.com/ubuntu-ports/"
+      fi
       local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       ;;
   esac
@@ -304,8 +312,9 @@ function find_fast_mirror() {
 
   #
   # ignore or enforce inclusion of current_mirror
+  # honor --exclude-current by not prioritizing the current mirror
   #
-  if [[ -n $current_mirror ]]; then
+  if [[ -n $current_mirror && ${exclude_current:-} != "true" ]]; then
     preferred_mirrors+=("$current_mirror")
   fi
 
@@ -366,10 +375,10 @@ function find_fast_mirror() {
     done <<< "$healthcheck_results_sorted_by_date"
   fi
   if [[ ${ignore_sync_state:-} == "true" ]]; then
-    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep -v "^0 " | cut -d" " -f2-)
+    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep -v "^0 " | awk '{ $1=""; sub(/^ /, ""); print }')
     >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable"
   else
-    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep "^$healthy_mirrors_date " | cut -d" " -f2-)
+    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep "^$healthy_mirrors_date " | awk '{ $1=""; sub(/^ /, ""); print }')
     >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
   fi
 
@@ -392,8 +401,9 @@ function find_fast_mirror() {
   >&2 echo -n "Speed testing $(echo "$speedtest_mirrors" | wc -l) of the available $(echo "$healthy_mirrors" | wc -l) mirrors (sample download size: $((sample_size_kb))KB)"
   local mirrors_with_speed=$(
     echo "$speedtest_mirrors" \
-    | __xargs -P $((download_parallel)) -i bash -c \
-          "curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sSf -w '%{speed_download} {}\n' -o /dev/null {}ls-lR.gz 2>/dev/null || true; >&2 echo -n '.'" \
+    | grep -v '^[[:space:]]*$' \
+    | __xargs -P $((download_parallel)) -I{} bash -c \
+          "printf '%s\t%s\n' \"\$(curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sS -w '%{speed_download}' -o /dev/null \"\${1}ls-lR.gz\" 2>/dev/null || echo 0)\" \"\$1\"; >&2 echo -n '.'" _ {} \
     | sort -rg
   )
   >&2 echo "done"
@@ -401,13 +411,22 @@ function find_fast_mirror() {
     >&2 echo "ERROR: Could not determine any fast mirror matching required criterias."
     return $RC_MISC_ERROR
   fi
-  local fastest_mirror=$(echo "${mirrors_with_speed%%$'\n'*}" | cut -d" " -f2)
-  fastest_mirror_speed=$(echo "${mirrors_with_speed%%$'\n'*}" | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
+  local first_result="${mirrors_with_speed%%$'\n'*}"
+  local fastest_mirror=$(echo "$first_result" | awk -F'\t' '{ print $2 }')
+  fastest_mirror_speed=$(echo "$first_result" | awk -F'\t' '{ print $1 }' | numfmt --to=iec --suffix=B/s)
+
+  # sanity check: ensure we detected a valid URL
+  if [[ ! $fastest_mirror =~ ^https?:// ]]; then
+    >&2 echo "ERROR: Fastest mirror detection returned invalid URL: $fastest_mirror"
+    >&2 echo "Top candidates:"
+    >&2 echo "$mirrors_with_speed" | sed -n '1,5p'
+    return $RC_MISC_ERROR
+  fi
   local speed_test_duration=$(( $(date +%s) - start_at ))
   if [[ $verbosity -gt 0 ]]; then
     echo "$mirrors_with_speed" | tail -n +2 | tac | while IFS= read -r mirror; do
-      mirror_speed=$(echo "${mirror%%$'\n'*}" | cut -d" " -f1 | numfmt --to=iec --suffix=B/s)
-      >&2 echo " -> $(echo "$mirror" | cut -d" " -f2) ($mirror_speed)"
+      mirror_speed=$(echo "${mirror%%$'\n'*}" | awk -F'\t' '{ print $1 }' | numfmt --to=iec --suffix=B/s)
+      >&2 echo " -> $(echo "$mirror" | awk -F'\t' '{ print $2 }') ($mirror_speed)"
     done
   fi
   >&2 echo " => $fastest_mirror ($fastest_mirror_speed) determined as fastest mirror within $speed_test_duration seconds"

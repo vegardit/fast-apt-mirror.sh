@@ -5,9 +5,9 @@
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 name: Build
 
-on:
+on:  # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
   schedule:
-    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
     - cron: '0 15 1 * *'
   push:
     branches-ignore:  # build all branches except:
@@ -64,7 +64,9 @@ jobs:
         os:  # https://github.com/actions/runner-images#available-images
         - ubuntu-latest
         - ubuntu-24.04
+        - ubuntu-24.04-arm
         - ubuntu-22.04
+        - ubuntu-22.04-arm
         - windows-latest
 
     steps:
@@ -95,7 +97,7 @@ jobs:
         if [[ "${{ matrix.os}}" == "ubuntu-20.04" ]]; then
           # workaround for bashcov error:
           #    The last version of bashcov (>= 0) to support your Ruby & RubyGems was 1.8.2. 
-          #    Try installing it with `gem install bashcov -v 1.8.2`"        
+          #    Try installing it with `gem install bashcov -v 1.8.2`"
           sudo gem install bashcov -v 1.8.2
         else
           sudo gem install bashcov
@@ -119,6 +121,14 @@ jobs:
       with:
         repo-name:   ${{ github.repository }}
         repo-branch: ${{ github.ref_name }}
+
+    - name: "Test fast-apt-mirror.sh Action (exclude-current on ARM)"
+      if: runner.arch == 'ARM64'
+      uses: ./
+      with:
+        repo-name:   ${{ github.repository }}
+        repo-branch: ${{ github.ref_name }}
+        exclude-current: true
 
 
     ##################################################
