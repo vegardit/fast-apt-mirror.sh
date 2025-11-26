@@ -284,8 +284,11 @@ function find_fast_mirror() {
   case $dist_name in
     debian)
       # see https://deb.debian.org/
-      local reference_mirror=$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}")
-      local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list | grep -Eo '(https?|ftp)://[^"]+/debian/')
+      local reference_mirror=$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}" || echo http://deb.debian.org/debian/)
+      local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list 2>/dev/null | grep -Eo '(https?|ftp)://[^"]+/debian/' || true)
+      if [[ -z $mirrors ]]; then
+        mirrors=$reference_mirror
+      fi
       local last_modified_path="/dists/${dist_version_name}-updates/main/Contents-${dist_arch}.gz"
       ;;
     kali)
@@ -375,10 +378,18 @@ function find_fast_mirror() {
     done <<< "$healthcheck_results_sorted_by_date"
   fi
   if [[ ${ignore_sync_state:-} == "true" ]]; then
-    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep -v "^0 " | awk '{ $1=""; sub(/^ /, ""); print }')
+    # ignore sync state completely: take all mirrors, even if last_modified is 0
+    local healthy_mirrors=$(
+      echo "$healthcheck_results_sorted_by_date" \
+      | awk '{ $1=""; sub(/^ /, ""); if ($0 != "") print }'
+    )
     >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable"
   else
-    local healthy_mirrors=$(echo "$healthcheck_results_sorted_by_date" | grep "^$healthy_mirrors_date " | awk '{ $1=""; sub(/^ /, ""); print }')
+    local healthy_mirrors=$(
+      echo "$healthcheck_results_sorted_by_date" \
+      | grep "^$healthy_mirrors_date " \
+      | awk '{ $1=""; sub(/^ /, ""); if ($0 != "") print }'
+    )
     >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
   fi
 
@@ -404,6 +415,7 @@ function find_fast_mirror() {
     | grep -v '^[[:space:]]*$' \
     | __xargs -P $((download_parallel)) -I{} bash -c \
           "printf '%s\t%s\n' \"\$(curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sS -w '%{speed_download}' -o /dev/null \"\${1}ls-lR.gz\" 2>/dev/null || echo 0)\" \"\$1\"; >&2 echo -n '.'" _ {} \
+    | awk -F'\t' '$1 ~ /^[0-9.]+$/ && $2 ~ /^https?:\/\// { print }' \
     | sort -rg
   )
   >&2 echo "done"

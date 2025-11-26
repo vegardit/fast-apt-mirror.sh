@@ -96,6 +96,14 @@ function get_dist_name() {
   refute_regex "$output" 'ERROR:'
 }
 
+@test "find: Find mirror with --ignore-sync-state only" {
+  assert_exitcode $RC_OK find --ignore-sync-state --speedtests 2 --healthchecks 8 --country DE
+  assert_regex "$output" 'Randomly selecting 8 mirrors...done'
+  assert_regex "$output" 'Speed testing 2 of the available'
+  assert_regex "$output" '=> (https?|ftp)://.* determined as fastest mirror'
+  refute_regex "$output" 'Fastest mirror detection returned invalid URL'
+}
+
 @test "find: Find and apply mirror" {
   case $(get_dist_name) in
     debian|kali|ubuntu) ;;
