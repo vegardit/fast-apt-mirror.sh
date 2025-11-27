@@ -329,6 +329,15 @@ function find_fast_mirror() {
   else
     mirrors=$(echo "$mirrors" | shuf)
   fi
+
+  # Deduplicate mirrors that only differ by trailing slashes, while preserving
+  # the first occurrence as-is.
+  mirrors=$(echo "$mirrors" | awk '{
+    key=$0
+    sub(/\/+$/, "", key)
+    if (!seen[key]++) print
+  }')
+
   if [[ -n $current_mirror && ${exclude_current:-} == "true" ]]; then
     mirrors=$(echo "$mirrors" | grep -v "$current_mirror")
   fi
