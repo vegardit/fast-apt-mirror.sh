@@ -345,23 +345,46 @@ function find_fast_mirror() {
   #
   >&2 echo -n "Checking health status of $(echo "$mirrors" | wc -l) mirrors using '$last_modified_path'"
   # returns a list with content like:
-  # 1675322068 http://archive.ubuntu.com/ubuntu/
-  # 1675322068 http://ftp.halifax.rwth-aachen.de/ubuntu/
+  # 1675322068 ok       http://archive.ubuntu.com/ubuntu/
+  # 0          missing  http://ftp.example.com/ubuntu/
   #
   # shellcheck disable=SC2016 # Expressions don't expand in single quotes, use double quotes for that
   local healthcheck_results=$(echo "$mirrors" | \
     __xargs -i -P "$(echo "$mirrors" | wc -l)" bash -c \
-       'last_modified=$(set -o pipefail; curl --max-time 3 -sSfL --head "{}'"${last_modified_path}"'" 2>/dev/null | grep -i "last-modified" | cut -d" " -f2- | LANG=C date -f- -u +%s || echo 0); echo "$last_modified {}"; >&2 echo -n "."'
+       'set -o pipefail
+        headers=$(curl --max-time 3 -sSIL "{}'"${last_modified_path}"'" 2>/dev/null || echo "CURL_ERROR")
+        http_status=$(printf "%s\n" "$headers" | awk '"'"'toupper($1) ~ /^HTTP\// { code=$2 } END { print code }'"'"')
+        last_modified=0
+        status="error"
+        if [[ "$headers" == "CURL_ERROR" || -z "$http_status" ]]; then
+          status="error"
+        elif [[ "$http_status" == "404" ]]; then
+          status="missing"
+        else
+          last_mod_line=$(printf "%s\n" "$headers" | grep -i "last-modified" | cut -d" " -f2- | head -n1)
+          if [[ -n "$last_mod_line" ]]; then
+            last_modified=$(LANG=C date -f- -u +%s <<<"$last_mod_line" 2>/dev/null || echo 0)
+            if [[ "$last_modified" != 0 ]]; then
+              status="ok"
+            else
+              status="nolastmod"
+            fi
+          else
+            status="nolastmod"
+          fi
+        fi
+        echo "$last_modified $status {}"
+        >&2 echo -n "."'
   )
   >&2 echo "done"
 
   #
   # filter out broken and outdated mirrors
   #
-  local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -t' ' -k1,1rn -k2) # sort by last modified date and URL
+  local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -t' ' -k1,1rn -k3) # sort by last modified date and URL
 
   # determine the update time of a healthy mirror by first checking the reference mirror's modification date
-  local healthy_mirrors_date=$(echo "$healthcheck_results_sorted_by_date" | grep -E "[0-9]+ $reference_mirror" | awk 'NR==1 { print $1 }' || true)
+  local healthy_mirrors_date=$(echo "$healthcheck_results_sorted_by_date" | awk -v ref="$reference_mirror" '$3 == ref { print $1; exit }' || true)
   if [[ -z $healthy_mirrors_date ]]; then
     # fall back to last modified date of newest mirror found
     healthy_mirrors_date=${healthcheck_results_sorted_by_date%% *}
@@ -369,26 +392,39 @@ function find_fast_mirror() {
   if [[ $verbosity -gt 0 ]]; then
     while IFS= read -r mirror; do
       local last_modified=${mirror%% *}
-      local mirror_url=${mirror#* }
+      local rest=${mirror#* }
+      local status=${rest%% *}
+      local mirror_url=${rest#* }
       case $last_modified in
-        "$healthy_mirrors_date") >&2 echo " -> UP-TO-DATE (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url" ;;
-        0)                       >&2 echo " ->                         n/a                         $mirror_url" ;;
-        *)                       >&2 echo " -> outdated   (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url" ;;
+        "$healthy_mirrors_date")
+          >&2 echo " -> UP-TO-DATE (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url"
+          ;;
+        0)
+          case $status in
+            missing)   >&2 echo " -> missing     (404 for $last_modified_path)           $mirror_url" ;;
+            nolastmod) >&2 echo " -> no Last-Modified header for $last_modified_path     $mirror_url" ;;
+            *)         >&2 echo " ->                         n/a                         $mirror_url" ;;
+          esac
+          ;;
+        *)
+          >&2 echo " -> outdated   (last modified: $(date -d "@$last_modified" +'%Y-%m-%d %H:%M:%S %Z')) $mirror_url"
+          ;;
       esac
     done <<< "$healthcheck_results_sorted_by_date"
   fi
   if [[ ${ignore_sync_state:-} == "true" ]]; then
-    # ignore sync state completely: take all mirrors, even if last_modified is 0
+    # ignore sync state completely: take all mirrors with a valid probe result,
+    # even if last_modified is 0, but drop mirrors where the probe failed or the
+    # file is missing (status "error"/"missing").
     local healthy_mirrors=$(
       echo "$healthcheck_results_sorted_by_date" \
-      | awk '{ $1=""; sub(/^ /, ""); if ($0 != "") print }'
+      | awk '$2 != "missing" && $2 != "error" { $1=""; $2=""; sub(/^  /, ""); if ($0 != "") print }'
     )
     >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable"
   else
     local healthy_mirrors=$(
       echo "$healthcheck_results_sorted_by_date" \
-      | grep "^$healthy_mirrors_date " \
-      | awk '{ $1=""; sub(/^ /, ""); if ($0 != "") print }'
+      | awk -v d="$healthy_mirrors_date" '$1 == d && $2 != "missing" && $2 != "error" { $1=""; $2=""; sub(/^  /, ""); if ($0 != "") print }'
     )
     >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
   fi
