@@ -37,7 +37,7 @@ readonly RC_MISC_ERROR=222
 # alternative to set -e, which is ignored within function bodies:
 set -o errtrace
 # shellcheck disable=SC2154 # rc is referenced but not assigned.
-trap 'rc=$?; if [[ $rc -ne '$RC_MISC_ERROR' && $rc -ne '$RC_INVALID_ARGS' ]]; then echo >&2 "$(date +%H:%M:%S) Error - exited with status $rc in $BASH_SOURCE at line $LINENO:"; cat -n $BASH_SOURCE | tail -n+$((LINENO - 3)) | head -n7; exit $rc; fi' ERR
+trap 'rc=$?; if [[ $rc -ne '$RC_MISC_ERROR' && $rc -ne '$RC_INVALID_ARGS' ]]; then echo >&2 "$(date +%H:%M:%S) Error - exited with status $rc in $BASH_SOURCE at line $LINENO:"; cat -n "$BASH_SOURCE" | tail -n+$((LINENO - 3)) | head -n7 >&2; exit $rc; fi' ERR
 
 # if TRACE_SCRIPTS=1 or TRACE_SCRIPTS contains a glob pattern that matches $0
 # shellcheck disable=SC2053 # Quote the right-hand side of == in [[ ]] to prevent glob matching
@@ -339,7 +339,7 @@ function find_fast_mirror() {
   }')
 
   if [[ -n $current_mirror && ${exclude_current:-} == "true" ]]; then
-    mirrors=$(echo "$mirrors" | grep -v "$current_mirror")
+    mirrors=$(echo "$mirrors" | awk -v m="$current_mirror" 'NF && $0 != m')
   fi
   mirrors=$(echo "$mirrors" | unique | max_lines "$max_healthchecks" | sort )
 
@@ -455,14 +455,15 @@ function find_fast_mirror() {
   # test download speed and select fastest mirror
   #
   >&2 echo -n "Speed testing $(echo "$speedtest_mirrors" | wc -l) of the available $(echo "$healthy_mirrors" | wc -l) mirrors (sample download size: $((sample_size_kb))KB)"
-  local mirrors_with_speed=$(
+  local mirrors_with_speed
+  mirrors_with_speed=$(
     echo "$speedtest_mirrors" \
-    | grep -v '^[[:space:]]*$' \
+    | awk 'NF' \
     | __xargs -P $((download_parallel)) -I{} bash -c \
           "printf '%s\t%s\n' \"\$(curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sS -w '%{speed_download}' -o /dev/null \"\${1}ls-lR.gz\" 2>/dev/null || echo 0)\" \"\$1\"; >&2 echo -n '.'" _ {} \
     | awk -F'\t' '$1 ~ /^[0-9.]+$/ && $2 ~ /^https?:\/\// { print }' \
     | sort -rg
-  )
+  ) || return $RC_MISC_ERROR
   >&2 echo "done"
   if [[ -z $mirrors_with_speed ]]; then
     >&2 echo "ERROR: Could not determine any fast mirror matching required criterias."
@@ -476,7 +477,7 @@ function find_fast_mirror() {
   if [[ ! $fastest_mirror =~ ^https?:// ]]; then
     >&2 echo "ERROR: Fastest mirror detection returned invalid URL: $fastest_mirror"
     >&2 echo "Top candidates:"
-    >&2 echo "$mirrors_with_speed" | sed -n '1,5p'
+    echo "$mirrors_with_speed" | sed -n '1,5p' >&2
     return $RC_MISC_ERROR
   fi
   local speed_test_duration=$(( $(date +%s) - start_at ))
