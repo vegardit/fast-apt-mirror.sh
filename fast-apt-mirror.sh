@@ -306,8 +306,12 @@ function find_fast_mirror() {
       # Ensure ARM architectures consider ports.ubuntu.com even if not in mirrors list
       if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
         mirrors+=$'\n'"http://ports.ubuntu.com/ubuntu-ports/"
+        # Some mirrors (including ports.ubuntu.com) may not expose per-arch Contents files
+        # for all pockets, but InRelease should reliably exist.
+        local last_modified_path="/dists/${dist_version_name}-security/InRelease"
+      else
+        local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       fi
-      local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       ;;
   esac
   preferred_mirrors+=("$reference_mirror")
@@ -325,7 +329,10 @@ function find_fast_mirror() {
   # select preferred plus random mirros
   #
   if [[ ${#preferred_mirrors[@]} -gt 0 ]]; then
-    mirrors=$(printf "%s\n" "${preferred_mirrors[@]}")$'\n'$(echo "$mirrors" | shuf)
+    mirrors=$(
+      printf "%s\n" "${preferred_mirrors[@]}"
+      echo "$mirrors" | shuf
+    )
   else
     mirrors=$(echo "$mirrors" | shuf)
   fi
