@@ -122,16 +122,11 @@ jobs:
 
     - name: "Test fast-apt-mirror.sh Action"
       uses: ./
-      with:
-        repo-name:   ${{ github.repository }}
-        repo-branch: ${{ github.ref_name }}
 
     - name: "Test fast-apt-mirror.sh Action (exclude-current on ARM)"
       if: runner.arch == 'ARM64'
       uses: ./
       with:
-        repo-name:   ${{ github.repository }}
-        repo-branch: ${{ github.ref_name }}
         exclude-current: true
 
 
