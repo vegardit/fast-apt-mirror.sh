@@ -348,7 +348,11 @@ function find_fast_mirror() {
   if [[ -n $current_mirror && ${exclude_current:-} == "true" ]]; then
     mirrors=$(echo "$mirrors" | awk -v m="$current_mirror" 'NF && $0 != m')
   fi
-  mirrors=$(echo "$mirrors" | unique | max_lines "$max_healthchecks" | sort )
+  mirrors=$(echo "$mirrors" | awk 'NF' | unique | max_lines "$max_healthchecks" | sort)
+  if [[ -z $mirrors ]]; then
+    >&2 echo "WARNING: No mirrors left for health checks, falling back to reference mirror."
+    mirrors=$reference_mirror
+  fi
 
   >&2 echo "done"
 
@@ -359,14 +363,14 @@ function find_fast_mirror() {
   #
   # checking reachability and sync status of mirrors
   #
-  >&2 echo -n "Checking health status of $(echo "$mirrors" | wc -l) mirrors using '$last_modified_path'"
+  >&2 echo -n "Checking health status of $(echo "$mirrors" | awk 'NF' | wc -l) mirrors using '$last_modified_path'"
   # returns a list with content like:
   # 1675322068 ok       http://archive.ubuntu.com/ubuntu/
   # 0          missing  http://ftp.example.com/ubuntu/
   #
   # shellcheck disable=SC2016 # Expressions don't expand in single quotes, use double quotes for that
-  local healthcheck_results=$(echo "$mirrors" | \
-    __xargs -i -P "$(echo "$mirrors" | wc -l)" bash -c \
+  local healthcheck_results=$(echo "$mirrors" | awk 'NF' | \
+    __xargs -i -P "$(echo "$mirrors" | awk 'NF' | wc -l)" bash -c \
        'set -o pipefail
         headers=$(curl --max-time 3 -sSIL "{}'"${last_modified_path}"'" 2>/dev/null || echo "CURL_ERROR")
         http_status=$(printf "%s\n" "$headers" | awk '"'"'toupper($1) ~ /^HTTP\// { code=$2 } END { print code }'"'"')
@@ -400,10 +404,13 @@ function find_fast_mirror() {
   local healthcheck_results_sorted_by_date=$(echo "$healthcheck_results" | sort -t' ' -k1,1rn -k3) # sort by last modified date and URL
 
   # determine the update time of a healthy mirror by first checking the reference mirror's modification date
-  local healthy_mirrors_date=$(echo "$healthcheck_results_sorted_by_date" | awk -v ref="$reference_mirror" '$3 == ref { print $1; exit }' || true)
+  # only consider it if it produced a usable (non-zero) Last-Modified timestamp
+  local healthy_mirrors_date
+  healthy_mirrors_date=$(echo "$healthcheck_results_sorted_by_date" | awk -v ref="$reference_mirror" '$3 == ref && $2 != "missing" && $2 != "error" && $1 != 0 { print $1; exit }' || true)
   if [[ -z $healthy_mirrors_date ]]; then
-    # fall back to last modified date of newest mirror found
-    healthy_mirrors_date=${healthcheck_results_sorted_by_date%% *}
+    # fall back to last modified date of newest healthy mirror found
+    healthy_mirrors_date=$(echo "$healthcheck_results_sorted_by_date" | awk '$2 != "missing" && $2 != "error" && $1 != 0 { print $1; exit }' || true)
+    healthy_mirrors_date=${healthy_mirrors_date:-0}
   fi
   if [[ $verbosity -gt 0 ]]; then
     while IFS= read -r mirror; do
@@ -428,7 +435,7 @@ function find_fast_mirror() {
       esac
     done <<< "$healthcheck_results_sorted_by_date"
   fi
-  if [[ ${ignore_sync_state:-} == "true" ]]; then
+  if [[ ${ignore_sync_state:-} == "true" || $healthy_mirrors_date == 0 ]]; then
     # ignore sync state completely: take all mirrors with a valid probe result,
     # even if last_modified is 0, but drop mirrors where the probe failed or the
     # file is missing (status "error"/"missing").
@@ -436,13 +443,22 @@ function find_fast_mirror() {
       echo "$healthcheck_results_sorted_by_date" \
       | awk '$2 != "missing" && $2 != "error" { $1=""; $2=""; sub(/^  /, ""); if ($0 != "") print }'
     )
-    >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable"
+    >&2 echo " => $(echo "$healthy_mirrors" | awk 'NF' | wc -l) mirrors are reachable"
   else
     local healthy_mirrors=$(
       echo "$healthcheck_results_sorted_by_date" \
       | awk -v d="$healthy_mirrors_date" '$1 == d && $2 != "missing" && $2 != "error" { $1=""; $2=""; sub(/^  /, ""); if ($0 != "") print }'
     )
-    >&2 echo " => $(echo "$healthy_mirrors" | wc -l) mirrors are reachable and up-to-date"
+    if [[ -z $healthy_mirrors ]]; then
+      # fall back to reachable mirrors if no mirror matches the expected sync timestamp
+      healthy_mirrors=$(
+        echo "$healthcheck_results_sorted_by_date" \
+        | awk '$2 != "missing" && $2 != "error" { $1=""; $2=""; sub(/^  /, ""); if ($0 != "") print }'
+      )
+      >&2 echo " => $(echo "$healthy_mirrors" | awk 'NF' | wc -l) mirrors are reachable"
+    else
+      >&2 echo " => $(echo "$healthy_mirrors" | awk 'NF' | wc -l) mirrors are reachable and up-to-date"
+    fi
   fi
 
   #
@@ -456,12 +472,12 @@ function find_fast_mirror() {
       fi
     done
   fi
-  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | unique | max_lines "$max_speedtests")
+  speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | awk 'NF' | unique | max_lines "$max_speedtests")
 
   #
   # test download speed and select fastest mirror
   #
-  >&2 echo -n "Speed testing $(echo "$speedtest_mirrors" | wc -l) of the available $(echo "$healthy_mirrors" | wc -l) mirrors (sample download size: $((sample_size_kb))KB)"
+  >&2 echo -n "Speed testing $(echo "$speedtest_mirrors" | awk 'NF' | wc -l) of the available $(echo "$healthy_mirrors" | awk 'NF' | wc -l) mirrors (sample download size: $((sample_size_kb))KB)"
   local mirrors_with_speed
   mirrors_with_speed=$(
     echo "$speedtest_mirrors" \
