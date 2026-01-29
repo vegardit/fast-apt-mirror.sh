@@ -297,19 +297,25 @@ function find_fast_mirror() {
       local last_modified_path="/dists/${dist_version_name}/main/Contents-${dist_arch}.gz"
       ;;
     ubuntu|pop)
+      local mirrors=$(curl --max-time 5 -sSfL "http://mirrors.ubuntu.com/${country:-mirrors}.txt")
       if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
         local reference_mirror=http://ports.ubuntu.com/ubuntu-ports/
-      else
-        local reference_mirror=http://archive.ubuntu.com/ubuntu/
-      fi
-      local mirrors=$(curl --max-time 5 -sSfL "http://mirrors.ubuntu.com/${country:-mirrors}.txt")
-      # Ensure ARM architectures consider ports.ubuntu.com even if not in mirrors list
-      if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
-        mirrors+=$'\n'"http://ports.ubuntu.com/ubuntu-ports/"
-        # Some mirrors (including ports.ubuntu.com) may not expose per-arch Contents files
-        # for all pockets, but InRelease should reliably exist.
+        # On Ubuntu ARM, the default sources use the "ubuntu-ports" tree.
+        # Transform the "ubuntu" mirror list to "ubuntu-ports" candidates.
+        mirrors=$(
+          echo "$mirrors" | awk '{
+            url=$0
+            if (url ~ /\/ubuntu(-ports)?\/?$/) {
+              sub(/\/ubuntu\/?$/, "/ubuntu-ports/", url)
+            }
+            print url
+          }'
+        )
+        mirrors+=$'\n'"$reference_mirror"
+        # Some mirrors may not expose per-arch Contents files for all pockets, but InRelease should exist.
         local last_modified_path="/dists/${dist_version_name}-security/InRelease"
       else
+        local reference_mirror=http://archive.ubuntu.com/ubuntu/
         local last_modified_path="/dists/${dist_version_name}-security/Contents-${dist_arch}.gz"
       fi
       ;;
@@ -467,7 +473,7 @@ function find_fast_mirror() {
   local speedtest_mirrors=''
   if [[ ${#preferred_mirrors[@]} -gt 0 ]]; then
     for preferred_mirror in "${preferred_mirrors[@]}"; do
-      if [[ $healthy_mirrors = *"$preferred_mirror"* ]]; then
+      if echo "$healthy_mirrors" | awk -v p="$preferred_mirror" 'BEGIN{sub(/\/+$/, "", p)} {u=$0; sub(/\/+$/, "", u); if (u==p) {found=1; exit}} END{exit !found}'; then
         speedtest_mirrors+=$preferred_mirror$'\n'
       fi
     done
