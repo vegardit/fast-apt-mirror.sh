@@ -305,11 +305,10 @@ function find_fast_mirror() {
         mirrors=$(
           echo "$mirrors" | awk '{
             url=$0
-            if (url ~ /\/ubuntu(-ports)?\/?$/) {
-              sub(/\/ubuntu\/?$/, "/ubuntu-ports/", url)
-            }
-            print url
-          }'
+            if (url ~ /\/ubuntu-ports(\/|$)/) { print url; next }
+            if (url ~ /\/ubuntu\//) { sub(/\/ubuntu\//, "/ubuntu-ports/", url); print url; next }
+            if (url ~ /\/ubuntu\/?$/) { sub(/\/ubuntu\/?$/, "/ubuntu-ports/", url); print url; next }
+          }' | awk 'NF'
         )
         mirrors+=$'\n'"$reference_mirror"
         # Some mirrors may not expose per-arch Contents files for all pockets, but InRelease should exist.
@@ -473,9 +472,9 @@ function find_fast_mirror() {
   local speedtest_mirrors=''
   if [[ ${#preferred_mirrors[@]} -gt 0 ]]; then
     for preferred_mirror in "${preferred_mirrors[@]}"; do
-      if echo "$healthy_mirrors" | awk -v p="$preferred_mirror" 'BEGIN{sub(/\/+$/, "", p)} {u=$0; sub(/\/+$/, "", u); if (u==p) {found=1; exit}} END{exit !found}'; then
-        speedtest_mirrors+=$preferred_mirror$'\n'
-      fi
+      local matched_preferred_mirror
+      matched_preferred_mirror=$(echo "$healthy_mirrors" | awk -v p="$preferred_mirror" 'BEGIN{sub(/\/+$/, "", p)} {u=$0; key=u; sub(/\/+$/, "", key); if (key==p) {print u; exit}}')
+      if [[ -n $matched_preferred_mirror ]]; then speedtest_mirrors+=$matched_preferred_mirror$'\n'; fi
     done
   fi
   speedtest_mirrors=$(echo "$speedtest_mirrors$healthy_mirrors" | awk 'NF' | unique | max_lines "$max_speedtests")
@@ -489,7 +488,7 @@ function find_fast_mirror() {
     echo "$speedtest_mirrors" \
     | awk 'NF' \
     | __xargs -P $((download_parallel)) -I{} bash -c \
-          "printf '%s\t%s\n' \"\$(curl -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sS -w '%{speed_download}' -o /dev/null \"\${1}ls-lR.gz\" 2>/dev/null || echo 0)\" \"\$1\"; >&2 echo -n '.'" _ {} \
+          "printf '%s\t%s\n' \"\$(curl -fL -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sS -w '%{speed_download}' -o /dev/null \"\${1}ls-lR.gz\" 2>/dev/null || echo 0)\" \"\$1\"; >&2 echo -n '.'" _ {} \
     | awk -F'\t' '$1 ~ /^[0-9.]+$/ && $2 ~ /^https?:\/\// { print }' \
     | sort -rg
   ) || return $RC_MISC_ERROR
