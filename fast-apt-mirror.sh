@@ -84,6 +84,13 @@ function assert_option_is_int() {
   fi
 }
 
+function assert_option_has_value() {
+  if [[ $# -lt 2 || -z ${2:-} || ${2:-} == --* || ${2:-} == -[A-Za-z]* ]]; then
+    echo "Option $1: missing value"
+    exit $RC_INVALID_ARGS
+  fi
+}
+
 function get_dist_name() {
   if [ -r /etc/os-release ]; then
     (source /etc/os-release; printf '%s\n' "${ID,,}")
@@ -244,12 +251,12 @@ function find_fast_mirror() {
   #
   while [ $# -gt 0 ]; do
     case $1 in
-      -p|--parallel)  assert_option_is_int "$1" "$2"; shift; local download_parallel=$1 ;;
-      --healthchecks) assert_option_is_int "$1" "$2"; shift; local max_healthchecks=$1 ;;
-      --speedtests)   assert_option_is_int "$1" "$2"; shift; local max_speedtests=$1 ;;
-      --sample-size)  assert_option_is_int "$1" "$2"; shift; local sample_size_kb=$1 ;;
-      --sample-time)  assert_option_is_int "$1" "$2"; shift; local sample_time_secs=$1 ;;
-      --country)           shift; local country=${1^^} ;;
+      -p|--parallel)  assert_option_has_value "$1" "${2:-}"; assert_option_is_int "$1" "$2"; shift; local download_parallel=$1 ;;
+      --healthchecks) assert_option_has_value "$1" "${2:-}"; assert_option_is_int "$1" "$2"; shift; local max_healthchecks=$1 ;;
+      --speedtests)   assert_option_has_value "$1" "${2:-}"; assert_option_is_int "$1" "$2"; shift; local max_speedtests=$1 ;;
+      --sample-size)  assert_option_has_value "$1" "${2:-}"; assert_option_is_int "$1" "$2"; shift; local sample_size_kb=$1 ;;
+      --sample-time)  assert_option_has_value "$1" "${2:-}"; assert_option_is_int "$1" "$2"; shift; local sample_time_secs=$1 ;;
+      --country)      assert_option_has_value "$1" "${2:-}"; shift; local country=${1^^} ;;
       --apply)             local apply=true ;;
       --exclude-current)   local exclude_current=true ;;
       --ignore-sync-state) local ignore_sync_state=true ;;

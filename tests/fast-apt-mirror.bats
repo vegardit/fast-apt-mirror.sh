@@ -81,6 +81,14 @@ function get_dist_name() {
   refute_regex "$output" 'ERROR:'
 }
 
+@test "find: Reject missing option values" {
+  assert_exitcode $RC_INVALID_ARGS find --country
+  assert_regex "$output" "Option --country: missing value"
+
+  assert_exitcode $RC_INVALID_ARGS find --speedtests
+  assert_regex "$output" "Option --speedtests: missing value"
+}
+
 @test "find: Find mirror if executed without arguments" {
   assert_exitcode $RC_OK find
   assert_regex "$output" '=> (https?|ftp)://.* determined as fastest mirror'
