@@ -3,12 +3,12 @@ version: v1.0
 
 name: fast-apt-mirror.sh
 
-# See https://docs.semaphoreci.com/ci-cd-environment/machine-types/
-# and https://docs.semaphoreci.com/ci-cd-environment/ubuntu-18.04-image/
+# See https://docs.semaphore.io/reference/machine-types
+# and https://docs.semaphore.io/reference/os-ubuntu
 agent:
   machine:
     type: e1-standard-2
-    os_image: ubuntu2004
+    os_image: ubuntu2404
 
 blocks:
 - name: "Run shellcheck"
