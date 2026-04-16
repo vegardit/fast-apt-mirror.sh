@@ -329,7 +329,13 @@ function find_fast_mirror() {
       local last_modified_path="/dists/${dist_version_name}/main/Contents-${dist_arch}.gz"
       ;;
     ubuntu|pop)
-      local mirrors=$(curl --max-time 5 -sSfL "http://mirrors.ubuntu.com/${country:-mirrors}.txt")
+      local mirrors
+      # Avoid `local mirrors=$(...)` here: that form masks curl failures and makes
+      # a broken mirror-list download look like a legitimate one-entry fallback.
+      mirrors=$(curl --max-time 5 -sSfL "http://mirrors.ubuntu.com/${country:-mirrors}.txt") || {
+        >&2 echo "WARNING: Failed to download Ubuntu mirror list from http://mirrors.ubuntu.com/${country:-mirrors}.txt."
+        mirrors=''
+      }
       if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
         local reference_mirror=http://ports.ubuntu.com/ubuntu-ports/
         # On Ubuntu ARM, the default sources use the "ubuntu-ports" tree.
