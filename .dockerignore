@@ -1,0 +1,10 @@
+*
+
+!.dockerignore
+!Dockerfile*
+!LICENSE.txt
+!README.md
+!action.yml
+!fast-apt-mirror.sh
+!tests/
+!tests/**
