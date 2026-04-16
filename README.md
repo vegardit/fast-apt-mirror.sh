@@ -37,6 +37,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: Install fast-apt-mirror's dependencies
+      run: |
+        apt update --yes && apt install --yes --no-install-recommends jq curl sudo
     - name: Configure Fast APT Mirror
       uses: vegardit/fast-apt-mirror.sh@v1
       with: # the following parameters are listed with their action default values and are optional
