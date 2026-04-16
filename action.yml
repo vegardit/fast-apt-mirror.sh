@@ -29,28 +29,32 @@ runs:
         echo "::group::Linux: Configure fast APT mirror"
         set -euo pipefail
 
-        # Step to get country code if not provided
-        if [[ -z "${{ inputs.country }}" ]]; then
-          echo "No country code provided, retrieving from public IP..."
-          IP_ADDRESS=$(curl -s http://checkip.amazonaws.com)
-          COUNTRY_CODE=$(curl -s http://ip-api.com/json/$IP_ADDRESS | jq -r '.countryCode')
-          echo "Detected country code: $COUNTRY_CODE"
-        else
-          COUNTRY_CODE="${{ inputs.country }}"
+        if ! command -v sudo >/dev/null 2>&1; then
+          echo "Required command 'sudo' is not available" >&2
+          exit 1
         fi
 
         echo 'APT::Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-acquire-retries
 
         if [[ "${{ env.ACT }}" != "true" ]]; then
-          bash "$GITHUB_ACTION_PATH/fast-apt-mirror.sh" find --apply --verbose \
-            --healthchecks ${{ inputs.healthchecks }} \
-            --ignore-sync-state \
-            --speedtests   ${{ inputs.speedtests }} \
-            --parallel     ${{ inputs.parallel }} \
-            --sample-size  ${{ inputs.sample-size }} \
-            --sample-time  ${{ inputs.sample-time }} \
-            --country      "$COUNTRY_CODE" \
-            ${{ inputs.exclude-current == 'true' && '--exclude-current' || '' }} \
+          find_args=(
+            --apply
+            --verbose
+            --healthchecks "${{ inputs.healthchecks }}"
+            --ignore-sync-state
+            --speedtests   "${{ inputs.speedtests }}"
+            --parallel     "${{ inputs.parallel }}"
+            --sample-size  "${{ inputs.sample-size }}"
+            --sample-time  "${{ inputs.sample-time }}"
+          )
+          if [[ -n "${{ inputs.country }}" ]]; then
+            find_args+=(--country "${{ inputs.country }}")
+          fi
+          if [[ "${{ inputs.exclude-current }}" == 'true' ]]; then
+            find_args+=(--exclude-current)
+          fi
+
+          bash "$GITHUB_ACTION_PATH/fast-apt-mirror.sh" find "${find_args[@]}" \
             || exit 0 # don't fail action if APT mirror detection failed for whatever reason
         fi
 

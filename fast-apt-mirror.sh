@@ -112,6 +112,31 @@ function get_dist_version_name() {
   printf 'unknown\n'
 }
 
+function detect_country_code() {
+  local country_info
+  country_info=$(
+    curl --max-time 10 -fsS 'http://ip-api.com/json/?fields=status,message,countryCode' \
+      | tr -d '\r\n'
+  ) || {
+    >&2 echo "WARNING: Failed to detect country code automatically."
+    return 1
+  }
+
+  if [[ ! $country_info =~ \"status\"[[:space:]]*:[[:space:]]*\"success\" ]]; then
+    local error_message=$(printf '%s\n' "$country_info" | sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    >&2 echo "WARNING: Failed to detect country code automatically: ${error_message:-unknown error}."
+    return 1
+  fi
+
+  local country_code=$(printf '%s\n' "$country_info" | sed -n 's/.*"countryCode"[[:space:]]*:[[:space:]]*"\([A-Z][A-Z]\)".*/\1/p')
+  if [[ ! $country_code =~ ^[A-Z][A-Z]$ ]]; then
+    >&2 echo "WARNING: Failed to detect country code automatically: invalid response."
+    return 1
+  fi
+
+  printf '%s\n' "$country_code"
+}
+
 function matches() {
   local text=$1 pattern=$2
   [[ $text =~ $pattern ]]
@@ -257,12 +282,19 @@ function find_fast_mirror() {
   local sample_time_secs=${sample_time_secs:-3}
   local max_healthchecks=${max_healthchecks:-20}
   local verbosity=${verbosity:-0}
+  local country=${country:-}
 
   local dist_name=$(get_dist_name)
   case $dist_name in
     debian|kali|ubuntu|pop)
       local dist_version_name=$(get_dist_version_name)
       local dist_arch=$(dpkg --print-architecture)
+      if [[ $dist_name =~ ^(ubuntu|pop)$ && -z ${country:-} ]]; then
+        country=$(detect_country_code || true)
+        if [[ -n $country ]]; then
+          >&2 echo "Auto-detected country code: $country"
+        fi
+      fi
       ;;
     *) # use dummy values on unsupported Linux distributions so the speed test can still be executed
       local dist_name=debian
