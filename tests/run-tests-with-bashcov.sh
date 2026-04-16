@@ -20,7 +20,7 @@ fi
 #  bash -c "
 #    echo '::group::Install pre-reqs' &&
 #    apt-get update &&
-#    apt-get install bash curl apt-transport-https ca-certificates git -y &&
+#    apt-get install sudo -y &&
 #    gem install bashcov simplecov-console &&
 #    echo '::endgroup::' &&
 #    cp -r /mnt/workspace ~/workspace &&
@@ -29,13 +29,13 @@ fi
 #  "
 
 # running with non-root user as workaround for https://github.com/infertux/bashcov/issues/43
-docker run -it --rm \
+docker run --rm \
   -v "$project_dir:/mnt/workspace:ro" \
   ruby:latest \
   bash -c "
     echo '::group::Install pre-reqs' &&
     apt-get update &&
-    apt-get install bash curl apt-transport-https ca-certificates git sudo -y &&
+    apt-get install sudo -y &&
     gem install bashcov simplecov-console &&
     echo '::endgroup::' &&
     useradd -m bashcov &&

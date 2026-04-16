@@ -19,12 +19,13 @@ for image in "${@:-debian:stable-slim}"; do
   echo "# Testing [$image]..."
   echo "##############################"
   docker run --rm \
+    -v "$project_dir/.bats:/mnt/bats:ro" \
     -v "$project_dir:/mnt/workspace:ro" \
     "$image" \
     bash -c "
     echo '::group::Install pre-reqs' &&
     apt-get update &&
-    apt-get install bash curl apt-transport-https ca-certificates git -y &&
+    apt-get install curl apt-transport-https ca-certificates -y &&
     echo '::endgroup::' &&
     cp -r /mnt/workspace ~/workspace &&
     cd ~/workspace &&

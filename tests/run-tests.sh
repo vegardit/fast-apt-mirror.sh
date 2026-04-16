@@ -5,16 +5,24 @@
 #
 set -eu
 
-# install bats
-if [[ ! -d ~/bats/core ]]; then
-  mkdir -p ~/bats
-  git clone --depth=1 --single-branch https://github.com/bats-core/bats-core.git ~/bats/core
-fi
-if [[ ! -d ~/bats/support ]]; then
-  git clone --depth=1 --single-branch https://github.com/bats-core/bats-support.git ~/bats/support
-fi
-if [[ ! -d ~/bats/assert ]]; then
-  git clone --depth=1 --single-branch https://github.com/bats-core/bats-assert.git ~/bats/assert
+if [[ -d /mnt/bats/core && -d /mnt/bats/support && -d /mnt/bats/assert ]]; then
+  bats_dir=/mnt/bats
+  # The test files load helper libraries from ~/bats, so keep that path available
+  # when the shared checkout is mounted into the container at /mnt/bats.
+  ln -sfn "$bats_dir" ~/bats
+else
+  bats_dir=~/bats
+  # Keep a clone-based fallback for local runs that do not mount a shared Bats checkout.
+  if [[ ! -d "$bats_dir/core" ]]; then
+    mkdir -p "$bats_dir"
+    git clone --depth=1 --single-branch https://github.com/bats-core/bats-core.git "$bats_dir/core"
+  fi
+  if [[ ! -d "$bats_dir/support" ]]; then
+    git clone --depth=1 --single-branch https://github.com/bats-core/bats-support.git "$bats_dir/support"
+  fi
+  if [[ ! -d "$bats_dir/assert" ]]; then
+    git clone --depth=1 --single-branch https://github.com/bats-core/bats-assert.git "$bats_dir/assert"
+  fi
 fi
 
 for test_file in "${0%/*}"/*.bats; do
@@ -22,5 +30,5 @@ for test_file in "${0%/*}"/*.bats; do
   echo "# Testing [$test_file]..."
   echo "#####################################"
   echo "-----------------------------------"
-  bash ~/bats/core/bin/bats "$test_file"
+  bash "$bats_dir/core/bin/bats" "$test_file"
 done
