@@ -25,7 +25,7 @@ for image in "${@:-debian:stable-slim}"; do
     bash -c "
     echo '::group::Install pre-reqs' &&
     apt-get update &&
-    apt-get install curl apt-transport-https ca-certificates -y &&
+    apt-get install curl ca-certificates -y &&
     echo '::endgroup::' &&
     cp -r /mnt/workspace ~/workspace &&
     cd ~/workspace &&
