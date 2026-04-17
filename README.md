@@ -76,8 +76,8 @@ Nothing to do, already using: http://azure.archive.ubuntu.com/ubuntu/
 
 For example:
 ```bash
-# install pre-reqs: bash, curl and HTTPS transport support for apt
-$ sudo apt-get install -y bash curl apt-transport-https ca-certificates
+# install pre-reqs: curl and CA certificates for apt
+$ sudo apt-get install -y curl ca-certificates
 
 # install fast-apt-mirror.sh under /usr/local/bin/ to make it automatically available via $PATH
 $ sudo curl https://raw.githubusercontent.com/vegardit/fast-apt-mirror.sh/v1/fast-apt-mirror.sh -o /usr/local/bin/fast-apt-mirror.sh
