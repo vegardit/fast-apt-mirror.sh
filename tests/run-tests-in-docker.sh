@@ -23,10 +23,6 @@ for image in "${@:-debian:stable-slim}"; do
     -v "$project_dir:/mnt/workspace:ro" \
     "$image" \
     bash -c "
-    echo '::group::Install pre-reqs' &&
-    apt-get update &&
-    apt-get install curl ca-certificates -y &&
-    echo '::endgroup::' &&
     cp -r /mnt/workspace ~/workspace &&
     cd ~/workspace &&
     bash tests/run-tests.sh

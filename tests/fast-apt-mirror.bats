@@ -13,6 +13,7 @@ function setup() {
   readonly RC_OK=0
   readonly RC_INVALID_ARGS=3
   readonly RC_MISC_ERROR=222
+  readonly BASH_BIN=$(command -v bash)
 
   readonly CANDIDATE=$(realpath $BATS_TEST_DIRNAME/../fast-apt-mirror.sh)
   chmod u+x $CANDIDATE
@@ -26,6 +27,21 @@ function assert_exitcode() {
     echo "# ERROR: $output" >&3
     return 1
   fi
+}
+
+function create_fake_bin() {
+  local fake_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "$fake_bin"
+  for cmd in "$@"; do
+    local target
+    target=$(command -v "$cmd") || return 1
+    cat > "$fake_bin/$cmd" <<EOF
+#!$BASH_BIN
+exec "$target" "\$@"
+EOF
+    chmod u+x "$fake_bin/$cmd"
+  done
+  echo "$fake_bin"
 }
 
 function get_dist_name() {
@@ -79,6 +95,30 @@ function get_dist_name() {
   assert_exitcode $RC_OK find --help
   assert_regex "$output" '^Usage: fast-apt-mirror.sh find'
   refute_regex "$output" 'ERROR:'
+  refute_regex "$output" "Required command 'curl' not found"
+  refute_regex "$output" 'using the Python fallback'
+}
+
+@test "find: Show usage help without touching the backend when curl is absent from PATH" {
+  fake_bin=$(create_fake_bin bash basename)
+  backend_log="${BATS_TEST_TMPDIR}/backend.log"
+  for cmd in curl python3 apt-get; do
+    cat > "${fake_bin}/$cmd" <<EOF
+#!$BASH_BIN
+printf '%s\n' "$cmd \$*" >> "$backend_log"
+exit 99
+EOF
+    chmod u+x "${fake_bin}/$cmd"
+  done
+
+  run env PATH="$fake_bin:$PATH" "$CANDIDATE" find --help
+
+  assert_success
+  assert_regex "$output" '^Usage: fast-apt-mirror.sh find'
+  refute_regex "$output" "Required command 'curl' not found"
+  refute_regex "$output" 'using the Python fallback'
+  refute_regex "$output" 'trying to install it'
+  [ ! -e "$backend_log" ]
 }
 
 @test "find: Reject missing option values" {
@@ -136,6 +176,41 @@ function get_dist_name() {
   assert_regex "$output" "Reading package lists..."
   assert_regex "$output" "Successfully changed mirror from \[.*\] to \[.*\]"
   refute_regex "$output" 'ERROR:'
+}
+
+@test "__probe_mirror: Reuses forced python backend without revalidating HTTPS support" {
+  fake_bin=$(create_fake_bin bash basename date cat)
+  python_log="${BATS_TEST_TMPDIR}/python.log"
+  cat > "${fake_bin}/python3" <<EOF
+#!$BASH_BIN
+printf '%s\n' "\$*" >> "$python_log"
+printf '200\tWed, 01 Jan 2025 00:00:00 GMT\n'
+EOF
+  chmod u+x "${fake_bin}/python3"
+
+  run env PATH="$fake_bin:$PATH" FAST_APT_MIRROR_HTTP_BACKEND=python "$CANDIDATE" __probe_mirror https://mirror.example/ /dists/test/InRelease
+
+  assert_success
+  [ "${lines[0]}" = '1735689600 ok https://mirror.example/' ]
+  assert_regex "$(cat "$python_log")" '^- probe https://mirror\.example//dists/test/InRelease 3 '
+  refute_regex "$(cat "$python_log")" 'deb\.debian\.org'
+}
+
+@test "__speed_test_mirror: Uses forced python backend arguments as-is" {
+  fake_bin=$(create_fake_bin bash basename cat)
+  python_log="${BATS_TEST_TMPDIR}/python.log"
+  cat > "${fake_bin}/python3" <<EOF
+#!$BASH_BIN
+printf '%s\n' "\$*" >> "$python_log"
+printf '12345\n'
+EOF
+  chmod u+x "${fake_bin}/python3"
+
+  run env PATH="$fake_bin:$PATH" FAST_APT_MIRROR_HTTP_BACKEND=python "$CANDIDATE" __speed_test_mirror https://mirror.example/ 2048 7
+
+  assert_success
+  [ "${lines[0]}" = $'12345\thttps://mirror.example/' ]
+  assert_regex "$(cat "$python_log")" '^- speed https://mirror\.example/ls-lR\.gz 7 2048$'
 }
 
 

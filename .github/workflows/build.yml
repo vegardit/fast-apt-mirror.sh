@@ -165,13 +165,16 @@ jobs:
         image:
         - debian:unstable-slim
         - debian:testing-slim
-        - debian:stable-slim
-        - debian:bookworm-slim
+        - ghcr.io/dockerhub-mirror/debian:stable-slim
+        - ghcr.io/dockerhub-mirror/debian:bookworm-slim
+        - ghcr.io/dockerhub-mirror/debian:trixie-slim
         - debian:bullseye-slim
-        - "bitnami/minideb:latest"
-        - "bitnami/minideb:bookworm"
-        - "bitnami/minideb:bullseye"
-        - "kalilinux/kali-last-release:latest"
+        - ghcr.io/dockerhub-mirror/bitnami__minideb:latest
+        - ghcr.io/dockerhub-mirror/bitnami__minideb:trixie
+        - ghcr.io/dockerhub-mirror/bitnami__minideb:bookworm
+        - bitnami/minideb:bullseye
+        - kalilinux/kali-last-release:latest
+        - python:3-slim
         - ubuntu:devel
         - ubuntu:latest
         - ubuntu:24.04

@@ -30,6 +30,13 @@ set -uo pipefail
 readonly RC_INVALID_ARGS=3
 readonly RC_MISC_ERROR=222
 
+readonly APT_HTTP_TIMEOUT_SECS=30
+readonly HTTP_DEFAULT_TIMEOUT_SECS=10
+readonly HTTP_METADATA_TIMEOUT_SECS=5
+readonly HTTP_PROBE_TIMEOUT_SECS=3
+readonly SPEEDTEST_TIMEOUT_SECS=3
+readonly HTTP_BACKEND_ENVVAR=FAST_APT_MIRROR_HTTP_BACKEND
+
 
 #################################################
 # configure logging/error reporting
@@ -66,7 +73,9 @@ readonly DESC_SET="Configures the given APT mirror in /etc/apt/(sources.list|sou
 
 # workaround to prevent: "xargs: environment is too large for exec" in some environments
 function __xargs() {
-  env -i HOME="$HOME" LC_CTYPE="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" PATH="$PATH" TERM="${TERM:-}" USER="${USER:-}" xargs "$@"
+  # Preserve the selected transport backend across worker subprocesses while
+  # still keeping the xargs environment intentionally small.
+  env -i HOME="$HOME" LC_CTYPE="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" PATH="$PATH" TERM="${TERM:-}" USER="${USER:-}" "${HTTP_BACKEND_ENVVAR}=${!HTTP_BACKEND_ENVVAR:-}" xargs "$@"
 }
 
 function __sudo() {
@@ -75,6 +84,338 @@ function __sudo() {
   else
     sudo "$@"
   fi
+}
+
+function __has_command() {
+  hash "$1" &>/dev/null
+}
+
+function __install_curl_if_missing() {
+  if __has_command curl; then
+    return 0
+  fi
+
+  >&2 echo "INFO: Required command 'curl' not found, trying to install it..."
+  __sudo apt-get -o Acquire::http::Timeout="$APT_HTTP_TIMEOUT_SECS" update && \
+  __sudo apt-get -o Acquire::http::Timeout="$APT_HTTP_TIMEOUT_SECS" install -y --no-install-recommends curl ca-certificates
+}
+
+function __http_backend_for_url() {
+  local url=${1:-}
+  local forced_backend=${!HTTP_BACKEND_ENVVAR:-}
+  if [[ $forced_backend == 'curl' || $forced_backend == 'python' || $forced_backend == 'none' ]]; then
+    printf '%s\n' "$forced_backend"
+  elif __has_command curl; then
+    printf 'curl\n'
+  elif [[ $url == ftp://* ]]; then
+    printf 'none\n'
+  elif [[ $url == https://* ]]; then
+    if __has_python_https_support "$url"; then
+      printf 'python\n'
+    else
+      printf 'none\n'
+    fi
+  elif __has_command python3; then
+    printf 'python\n'
+  else
+    printf 'none\n'
+  fi
+}
+
+function __set_http_backend() {
+  printf -v "$HTTP_BACKEND_ENVVAR" '%s' "$1"
+  export "${HTTP_BACKEND_ENVVAR?}"
+}
+
+function __python_https_probe_url() {
+  local dist_name=$1 dist_arch=$2
+  case $dist_name in
+    debian) printf 'https://www.debian.org/mirror/list\n' ;;
+    kali)   printf 'https://http.kali.org/README?mirrorlist\n' ;;
+    ubuntu|pop)
+      if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
+        printf 'https://ports.ubuntu.com/ubuntu-ports/\n'
+      else
+        printf 'https://archive.ubuntu.com/ubuntu/\n'
+      fi
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+function __python_https_current_mirror_probe_url() {
+  local dist_name=$1 dist_version_name=$2 dist_arch=$3 current_mirror=${4:-}
+  [[ $current_mirror == https://* ]] || return 1
+
+  # Probe a package metadata path the script will actually use. Some mirrors
+  # reject the bare root URL while still serving package content correctly.
+  case $dist_name in
+    debian) printf '%s/dists/%s-updates/main/Contents-%s.gz\n' "${current_mirror%/}" "$dist_version_name" "$dist_arch" ;;
+    kali)   printf '%s/dists/%s/main/Contents-%s.gz\n' "${current_mirror%/}" "$dist_version_name" "$dist_arch" ;;
+    ubuntu|pop)
+      if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
+        printf '%s/dists/%s-security/InRelease\n' "${current_mirror%/}" "$dist_version_name"
+      else
+        printf '%s/dists/%s-security/Contents-%s.gz\n' "${current_mirror%/}" "$dist_version_name" "$dist_arch"
+      fi
+      ;;
+    *) printf '%s/ls-lR.gz\n' "${current_mirror%/}" ;;
+  esac
+}
+
+function __has_python_https_support() {
+  local probe_url=${1:-}
+  [[ $probe_url == https://* ]] || return 1
+
+  if [[ ${__PYTHON_HTTPS_SUPPORT_CHECKED_URL:-} != "$probe_url" ]]; then
+    __PYTHON_HTTPS_SUPPORT_CHECKED_URL=$probe_url
+    # Import checks are not enough on slim images. Only prefer Python when it
+    # can complete a real HTTPS request with certificate validation to a URL
+    # that this run will actually need.
+    if __has_command python3 && __http_python https-check "$probe_url" "$HTTP_METADATA_TIMEOUT_SECS" >/dev/null 2>&1
+    then
+      __PYTHON_HTTPS_SUPPORT=1
+    else
+      __PYTHON_HTTPS_SUPPORT=0
+    fi
+  fi
+
+  [[ ${__PYTHON_HTTPS_SUPPORT:-0} -eq 1 ]]
+}
+
+function __http_python() {
+  local mode=$1 url=$2 timeout=${3:-$HTTP_DEFAULT_TIMEOUT_SECS} extra=${4:-}
+  python3 - "$mode" "$url" "$timeout" "$extra" <<'PY'
+import signal
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.request
+
+mode, url, timeout_arg, extra = sys.argv[1:5]
+
+try:
+    timeout = float(timeout_arg)
+except ValueError:
+    timeout = 10.0
+
+ssl_context = ssl.create_default_context()
+base_headers = {
+    "Accept-Encoding": "identity",
+    "User-Agent": "fast-apt-mirror.sh",
+}
+
+def make_request(candidate_url, method="GET", extra_headers=None):
+    headers = dict(base_headers)
+    if extra_headers:
+        headers.update(extra_headers)
+    request = urllib.request.Request(candidate_url, headers=headers)
+    request.get_method = lambda: method
+    return request
+
+def open_request(request):
+    return urllib.request.urlopen(request, timeout=timeout, context=ssl_context)
+
+def get_response(candidate_url, extra_headers=None):
+    return open_request(make_request(candidate_url, "GET", extra_headers))
+
+def print_probe_result(status, headers):
+    print(f"{status}\t{headers.get('Last-Modified', '')}")
+
+def probe(candidate_url):
+    try:
+        response = open_request(make_request(candidate_url, "HEAD"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in (405, 501):
+            try:
+                response = get_response(candidate_url)
+            except urllib.error.HTTPError as exc2:
+                print_probe_result(exc2.code, exc2.headers)
+                return
+        else:
+            print_probe_result(exc.code, exc.headers)
+            return
+    try:
+        print_probe_result(response.status, response.headers)
+    finally:
+        response.close()
+
+def stream_get(candidate_url):
+    response = get_response(candidate_url)
+    try:
+        out = sys.stdout.buffer
+        while True:
+            chunk = response.read(65536)
+            if not chunk:
+                break
+            out.write(chunk)
+    finally:
+        response.close()
+
+def print_effective_url(candidate_url):
+    response = get_response(candidate_url)
+    try:
+        sys.stdout.write(response.geturl())
+    finally:
+        response.close()
+
+def https_check(candidate_url):
+    try:
+        with get_response(candidate_url) as response:
+            response.read(1)
+    except urllib.error.HTTPError:
+        pass
+
+def speed_test(candidate_url, sample_end_arg):
+    extra_headers = {}
+    max_bytes = None
+    if sample_end_arg.isdigit():
+        extra_headers["Range"] = f"bytes=0-{sample_end_arg}"
+        max_bytes = int(sample_end_arg) + 1
+    def _raise_timeout(signum, frame):
+        raise TimeoutError("speed test exceeded wall-clock timeout")
+    try:
+        previous_handler = signal.getsignal(signal.SIGALRM)
+        signal.signal(signal.SIGALRM, _raise_timeout)
+        signal.setitimer(signal.ITIMER_REAL, timeout)
+    except (AttributeError, OSError, ValueError):
+        previous_handler = None
+    started_at = time.monotonic()
+    response = get_response(candidate_url, extra_headers)
+    bytes_read = 0
+    try:
+        try:
+            while True:
+                chunk_size = 65536
+                if max_bytes is not None:
+                    remaining = max_bytes - bytes_read
+                    if remaining <= 0:
+                        break
+                    chunk_size = min(chunk_size, remaining)
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                bytes_read += len(chunk)
+        finally:
+            response.close()
+    finally:
+        if previous_handler is not None:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous_handler)
+    elapsed = time.monotonic() - started_at
+    if bytes_read <= 0 or elapsed <= 0:
+        print("0")
+    else:
+        print(int(bytes_read / elapsed))
+
+if mode == "get":
+    stream_get(url)
+elif mode == "effective-url":
+    print_effective_url(url)
+elif mode == "probe":
+    probe(url)
+elif mode == "https-check":
+    https_check(url)
+elif mode == "speed":
+    speed_test(url, extra)
+else:
+    raise SystemExit("unsupported mode")
+PY
+}
+
+function __http_get() {
+  local url=$1 timeout=${2:-$HTTP_DEFAULT_TIMEOUT_SECS}
+  case "$(__http_backend_for_url "$url")" in
+    curl) curl --max-time "$timeout" -fsSL "$url" ;;
+    python) __http_python get "$url" "$timeout" ;;
+    *) return 1 ;;
+  esac
+}
+
+function __http_effective_url() {
+  local url=$1 timeout=${2:-$HTTP_METADATA_TIMEOUT_SECS}
+  case "$(__http_backend_for_url "$url")" in
+    curl) curl --max-time "$timeout" -sSL -o /dev/null -w "%{url_effective}" "$url" ;;
+    python) __http_python effective-url "$url" "$timeout" ;;
+    *) return 1 ;;
+  esac
+}
+
+function __http_probe() {
+  local url=$1 timeout=${2:-$HTTP_PROBE_TIMEOUT_SECS}
+  local http_status='' last_mod_line=''
+
+  case "$(__http_backend_for_url "$url")" in
+    curl)
+      local headers
+      headers=$(curl --max-time "$timeout" -sSIL "$url" 2>/dev/null) || return 1
+      http_status=$(printf '%s\n' "$headers" | awk 'toupper($1) ~ /^HTTP\// { code=$2 } END { print code }')
+      last_mod_line=$(printf '%s\n' "$headers" | grep -i "last-modified" | cut -d" " -f2- | head -n1)
+      ;;
+    python)
+      local probe_result
+      probe_result=$(__http_python probe "$url" "$timeout" 2>/dev/null) || return 1
+      http_status=${probe_result%%$'\t'*}
+      if [[ $probe_result == *$'\t'* ]]; then
+        last_mod_line=${probe_result#*$'\t'}
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  [[ -n $http_status ]] || return 1
+  printf '%s\t%s\n' "$http_status" "$last_mod_line"
+}
+
+function __http_speed() {
+  local url=$1 timeout=${2:-$HTTP_DEFAULT_TIMEOUT_SECS} range_end=${3:-}
+  case "$(__http_backend_for_url "$url")" in
+    curl) curl -fL -r "0-$range_end" --max-time "$timeout" -sS -w '%{speed_download}' -o /dev/null "$url" ;;
+    python) __http_python speed "$url" "$timeout" "$range_end" ;;
+    *) return 1 ;;
+  esac
+}
+
+function __probe_mirror() {
+  local mirror_root=$1 last_modified_path=$2
+  local probe_result http_status='' last_mod_line='' last_modified=0 status='error'
+
+  probe_result=$(__http_probe "${mirror_root}${last_modified_path}" || true)
+  if [[ -n $probe_result ]]; then
+    http_status=${probe_result%%$'\t'*}
+    if [[ $probe_result == *$'\t'* ]]; then
+      last_mod_line=${probe_result#*$'\t'}
+    fi
+  fi
+
+  if [[ -z $http_status ]]; then
+    status='error'
+  elif [[ $http_status == "404" ]]; then
+    status='missing'
+  elif [[ -n $last_mod_line ]]; then
+    last_modified=$(LANG=C date -f- -u +%s <<<"$last_mod_line" 2>/dev/null || echo 0)
+    if [[ $last_modified != 0 ]]; then
+      status='ok'
+    else
+      status='nolastmod'
+    fi
+  else
+    status='nolastmod'
+  fi
+
+  printf '%s %s %s\n' "$last_modified" "$status" "$mirror_root"
+  >&2 echo -n "."
+}
+
+function __speed_test_mirror() {
+  local mirror_root=$1 range_end=$2 timeout=${3:-$SPEEDTEST_TIMEOUT_SECS}
+  local speed=0
+  speed=$(__http_speed "${mirror_root}ls-lR.gz" "$timeout" "$range_end" 2>/dev/null || echo 0)
+  printf '%s\t%s\n' "$speed" "$mirror_root"
+  >&2 echo -n "."
 }
 
 function assert_option_is_int() {
@@ -122,7 +463,7 @@ function get_dist_version_name() {
 function detect_country_code() {
   local country_info
   country_info=$(
-    curl --max-time 10 -fsS 'http://ip-api.com/json/?fields=status,message,countryCode' \
+    __http_get 'http://ip-api.com/json/?fields=status,message,countryCode' \
       | tr -d '\r\n'
   ) || {
     >&2 echo "WARNING: Failed to detect country code automatically."
@@ -239,13 +580,6 @@ function get_current_mirror() {
 shopt -s extglob
 
 function find_fast_mirror() {
-  if ! hash curl &>/dev/null; then
-    >&2 echo "INFO: Required command 'curl' not found, trying to install it..."
-    __sudo apt-get -o Acquire::http::Timeout=10 update && \
-    __sudo apt-get -o Acquire::http::Timeout=10 install -y --no-install-recommends curl ca-certificates || return $RC_MISC_ERROR
-  fi
-
-  local start_at=$(date +%s)
   #
   # argument parsing
   #
@@ -276,7 +610,7 @@ function find_fast_mirror() {
         echo "     --speedtests N      - Maximum number of healthy mirrors to test for speed - default is 5"
         echo " -p, --parallel N        - Number of parallel speed tests. May result in incorrect results because of competing connections but finds a suitable mirror faster."
         echo "     --sample-size KB    - Number of kilobytes to download during the speed from each mirror - default is 200KB"
-        echo "     --sample-time SECS  - Maximum number of seconds within the sample download from a mirror must finish - default is 3"
+        echo "     --sample-time SECS  - Maximum number of seconds within the sample download from a mirror must finish - default is $SPEEDTEST_TIMEOUT_SECS"
         echo " -v, --verbose           - More output. Specify multiple times to increase verbosity."
         return ;;
     esac
@@ -286,22 +620,17 @@ function find_fast_mirror() {
   local download_parallel=${download_parallel:-1}
   local max_speedtests=${max_speedtests:-5}
   local sample_size_kb=${sample_size_kb:-200}
-  local sample_time_secs=${sample_time_secs:-3}
+  local sample_time_secs=${sample_time_secs:-$SPEEDTEST_TIMEOUT_SECS}
   local max_healthchecks=${max_healthchecks:-20}
   local verbosity=${verbosity:-0}
   local country=${country:-}
+  local start_at=$(date +%s)
 
   local dist_name=$(get_dist_name)
   case $dist_name in
     debian|kali|ubuntu|pop)
       local dist_version_name=$(get_dist_version_name)
       local dist_arch=$(dpkg --print-architecture)
-      if [[ $dist_name =~ ^(ubuntu|pop)$ && -z ${country:-} ]]; then
-        country=$(detect_country_code || true)
-        if [[ -n $country ]]; then
-          >&2 echo "Auto-detected country code: $country"
-        fi
-      fi
       ;;
     *) # use dummy values on unsupported Linux distributions so the speed test can still be executed
       local dist_name=debian
@@ -315,6 +644,44 @@ function find_fast_mirror() {
   #
   local current_mirror=$(get_current_mirror | max_lines 1 || true)
 
+  # Keep --help side-effect free by selecting or installing the HTTP backend
+  # only after argument parsing is complete and real network work is needed.
+  if __has_command curl; then
+    __set_http_backend 'curl'
+  elif [[ $current_mirror == ftp://* && ${exclude_current:-} != "true" ]]; then
+    # Python's stdlib fallback cannot probe ftp:// mirrors with the metadata
+    # this script needs. Only require curl when that FTP current mirror will
+    # actually stay in the comparison set.
+    __set_http_backend 'none'
+    __install_curl_if_missing || return $RC_MISC_ERROR
+    __set_http_backend 'curl'
+  else
+    local python_vendor_probe_url='' python_current_probe_url=''
+    # Prefer a distro-owned HTTPS endpoint for backend selection so recovery
+    # from a broken current mirror does not depend on that mirror being healthy.
+    python_vendor_probe_url=$(__python_https_probe_url "$dist_name" "$dist_arch" 2>/dev/null || true)
+    python_current_probe_url=$(__python_https_current_mirror_probe_url "$dist_name" "$dist_version_name" "$dist_arch" "$current_mirror" 2>/dev/null || true)
+    if __has_python_https_support "$python_vendor_probe_url" ||
+       { [[ -n $python_current_probe_url && $python_current_probe_url != "$python_vendor_probe_url" ]] &&
+         __has_python_https_support "$python_current_probe_url"; }; then
+      # Reuse the validated backend in worker subprocesses instead of repeating
+      # the external HTTPS capability check for every mirror probe.
+      __set_http_backend 'python'
+      >&2 echo "INFO: Command 'curl' not found, using the Python fallback."
+    else
+      __set_http_backend 'none'
+      __install_curl_if_missing || return $RC_MISC_ERROR
+      __set_http_backend 'curl'
+    fi
+  fi
+
+  if [[ $dist_name =~ ^(ubuntu|pop)$ && -z ${country:-} ]]; then
+    country=$(detect_country_code || true)
+    if [[ -n $country ]]; then
+      >&2 echo "Auto-detected country code: $country"
+    fi
+  fi
+
   #
   # download mirror lists
   #
@@ -323,8 +690,16 @@ function find_fast_mirror() {
   case $dist_name in
     debian)
       # see https://deb.debian.org/
-      local reference_mirror=$(curl --max-time 5 -sSL -o /dev/null http://deb.debian.org/debian -w "%{url_effective}" || echo http://deb.debian.org/debian/)
-      local mirrors=$(curl --max-time 5 -sSL https://www.debian.org/mirror/list 2>/dev/null | grep -Eo '(https?|ftp)://[^"]+/debian/' || true)
+      local reference_mirror=$(__http_effective_url http://deb.debian.org/debian || echo http://deb.debian.org/debian/)
+      # Keep Debian mirror discovery on HTTPS. Falling back to the reference
+      # mirror is preferable to downgrading discovery to clear-text HTTP only.
+      local debian_mirror_pattern='(https?|ftp)://[^"]+/debian/'
+      # Python's stdlib fallback cannot probe ftp:// mirrors with the HTTP-like
+      # metadata this script needs, so keep them out of the curl-less path.
+      if [[ ${!HTTP_BACKEND_ENVVAR:-} == 'python' ]]; then
+        debian_mirror_pattern='https?://[^"]+/debian/'
+      fi
+      local mirrors=$(__http_get https://www.debian.org/mirror/list "$HTTP_METADATA_TIMEOUT_SECS" 2>/dev/null | grep -Eo "$debian_mirror_pattern" || true)
       if [[ -z $mirrors ]]; then
         mirrors=$reference_mirror
       fi
@@ -332,17 +707,24 @@ function find_fast_mirror() {
       ;;
     kali)
       local reference_mirror=https://http.kali.org/
-      local mirrors=$(curl -sSfL https://http.kali.org/README?mirrorlist | grep -oP '(?<=README">)(https.*)(?=</a)')
+      # Keep Kali candidates HTTPS-only so find --apply never downgrades an
+      # existing secure mirror configuration during normal discovery.
+      local mirrors=$(__http_get https://http.kali.org/README?mirrorlist "$HTTP_METADATA_TIMEOUT_SECS" 2>/dev/null | grep -oP '(?<=README">)(https.*)(?=</a)' || true)
       local last_modified_path="/dists/${dist_version_name}/main/Contents-${dist_arch}.gz"
       ;;
     ubuntu|pop)
       local mirrors
       # Avoid `local mirrors=$(...)` here: that form masks curl failures and makes
       # a broken mirror-list download look like a legitimate one-entry fallback.
-      mirrors=$(curl --max-time 5 -sSfL "http://mirrors.ubuntu.com/${country:-mirrors}.txt") || {
+      mirrors=$(__http_get "http://mirrors.ubuntu.com/${country:-mirrors}.txt" "$HTTP_METADATA_TIMEOUT_SECS") || {
         >&2 echo "WARNING: Failed to download Ubuntu mirror list from http://mirrors.ubuntu.com/${country:-mirrors}.txt."
         mirrors=''
       }
+      # Python's stdlib fallback cannot probe ftp:// mirrors with the HTTP-like
+      # metadata this script needs, so keep them out of the curl-less path.
+      if [[ ${!HTTP_BACKEND_ENVVAR:-} == 'python' ]]; then
+        mirrors=$(echo "$mirrors" | grep -Ev '^ftp://' || true)
+      fi
       if [[ $dist_arch == "arm64" || $dist_arch == "armhf" ]]; then
         local reference_mirror=http://ports.ubuntu.com/ubuntu-ports/
         # On Ubuntu ARM, the default sources use the "ubuntu-ports" tree.
@@ -418,33 +800,14 @@ function find_fast_mirror() {
   # 1675322068 ok       http://archive.ubuntu.com/ubuntu/
   # 0          missing  http://ftp.example.com/ubuntu/
   #
-  # shellcheck disable=SC2016 # Expressions don't expand in single quotes, use double quotes for that
+  local script_path
+  script_path=${BASH_SOURCE[0]}
+  if [[ $script_path != */* ]]; then
+    script_path=$(command -v "$script_path" 2>/dev/null || echo "$script_path")
+  fi
+  script_path=$(realpath "$script_path" 2>/dev/null || echo "$script_path")
   local healthcheck_results=$(echo "$mirrors" | awk 'NF' | \
-    __xargs -i -P "$(echo "$mirrors" | awk 'NF' | wc -l)" bash -c \
-       'set -o pipefail
-        headers=$(curl --max-time 3 -sSIL "{}'"${last_modified_path}"'" 2>/dev/null || echo "CURL_ERROR")
-        http_status=$(printf "%s\n" "$headers" | awk '"'"'toupper($1) ~ /^HTTP\// { code=$2 } END { print code }'"'"')
-        last_modified=0
-        status="error"
-        if [[ "$headers" == "CURL_ERROR" || -z "$http_status" ]]; then
-          status="error"
-        elif [[ "$http_status" == "404" ]]; then
-          status="missing"
-        else
-          last_mod_line=$(printf "%s\n" "$headers" | grep -i "last-modified" | cut -d" " -f2- | head -n1)
-          if [[ -n "$last_mod_line" ]]; then
-            last_modified=$(LANG=C date -f- -u +%s <<<"$last_mod_line" 2>/dev/null || echo 0)
-            if [[ "$last_modified" != 0 ]]; then
-              status="ok"
-            else
-              status="nolastmod"
-            fi
-          else
-            status="nolastmod"
-          fi
-        fi
-        echo "$last_modified $status {}"
-        >&2 echo -n "."'
+    __xargs -i -P "$(echo "$mirrors" | awk 'NF' | wc -l)" bash "$script_path" __probe_mirror "{}" "$last_modified_path"
   )
   >&2 echo "done"
 
@@ -532,8 +895,7 @@ function find_fast_mirror() {
   mirrors_with_speed=$(
     echo "$speedtest_mirrors" \
     | awk 'NF' \
-    | __xargs -P $((download_parallel)) -I{} bash -c \
-          "printf '%s\t%s\n' \"\$(curl -fL -r 0-$((sample_size_kb*1024)) --max-time $((sample_time_secs)) -sS -w '%{speed_download}' -o /dev/null \"\${1}ls-lR.gz\" 2>/dev/null || echo 0)\" \"\$1\"; >&2 echo -n '.'" _ {} \
+    | __xargs -P $((download_parallel)) -I{} bash "$script_path" __speed_test_mirror "{}" "$((sample_size_kb*1024))" "$((sample_time_secs))" \
     | awk -F'\t' '$1 ~ /^[0-9.]+$/ && $2 ~ /^https?:\/\// { print }' \
     | sort -rg
   ) || return $RC_MISC_ERROR
@@ -642,6 +1004,8 @@ function set_mirror() {
 # main entry point
 #
 case ${1:-} in
+  __probe_mirror)      shift; __probe_mirror "$@" ;;
+  __speed_test_mirror) shift; __speed_test_mirror "$@" ;;
   find)    shift; find_fast_mirror "$@" ;;
   set)     shift; set_mirror "$@" ;;
   current) shift; get_current_mirror "$@" | max_lines 1 ;;

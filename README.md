@@ -76,7 +76,7 @@ Nothing to do, already using: http://azure.archive.ubuntu.com/ubuntu/
 
 For example:
 ```bash
-# install pre-reqs: curl and CA certificates for apt
+# install pre-reqs for HTTPS mirror coverage: curl and CA certificates for apt
 $ sudo apt-get install -y curl ca-certificates
 
 # install fast-apt-mirror.sh under /usr/local/bin/ to make it automatically available via $PATH
@@ -112,7 +112,7 @@ http://artfiles.org/ubuntu
 
 Determines and prints the URL of a fast APT mirror and optionally activates it.
 
-To perform the connectivity and speed tests, the `curl` command must be installed.
+The `find` command prefers `curl`, but it can fall back to `python3` when `curl` is not installed and Python can complete HTTPS requests with certificate validation.
 
 Usage:
 ```yml
