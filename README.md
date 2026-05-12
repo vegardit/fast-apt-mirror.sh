@@ -47,7 +47,10 @@ jobs:
         sample-time:    3 # Maximum number of seconds within the sample download from a mirror must finish
         country:       "" # The country code for selecting Ubuntu mirrors. If not set, defaults to http://mirrors.ubuntu.com/mirrors.txt
         exclude-current: false # If set to "true", don't include the current APT mirror in the speed tests
+        configure-mirror: auto # Whether to configure the APT mirror: auto, true, or false
 ```
+
+With `configure-mirror: auto`, mirror configuration is skipped for local Act runs, but still runs on Forgejo and Gitea Actions runners even when `ACT=true` is set.
 
 The action output will look like this:
 ```sh

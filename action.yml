@@ -18,6 +18,7 @@ inputs:
   sample-time:      { default:     "3", description: "Maximum number of seconds within the sample download from a mirror must finish." }
   exclude-current:  { default: "false", description: "Don't include the current APT mirror in the speed tests." }
   country:          { default:      "", description: "The country code to use for selecting mirrors. NOTE: Only applies to Ubuntu based distros. Defaults to http://mirrors.ubuntu.com/mirrors.txt" }
+  configure-mirror: { default:  "auto", description: "Whether to configure the APT mirror: auto, true, or false. In auto mode, local Act runs are skipped unless running under Forgejo or Gitea Actions." }
 
 runs:
   using: "composite"
@@ -25,9 +26,28 @@ runs:
     - name: "Linux: Configure fast APT mirror"
       if: runner.os == 'Linux'
       shell: bash
+      env:
+        CONFIGURE_MIRROR: ${{ inputs.configure-mirror }}
       run: |
         echo "::group::Linux: Configure fast APT mirror"
         set -euo pipefail
+
+        configure_mirror="$CONFIGURE_MIRROR"
+        case "$configure_mirror" in
+          auto)
+            configure_mirror=true
+            # Forgejo and Gitea may set ACT=true because they run Actions through Act internally.
+            if [[ "${ACT:-}" == "true" && "${FORGEJO_ACTIONS:-}" != "true" && "${GITEA_ACTIONS:-}" != "true" ]]; then
+              configure_mirror=false
+            fi
+            ;;
+          true|false)
+            ;;
+          *)
+            echo "Invalid configure-mirror value: $configure_mirror. Expected auto, true, or false." >&2
+            exit 1
+            ;;
+        esac
 
         if ! command -v sudo >/dev/null 2>&1; then
           echo "Required command 'sudo' is not available" >&2
@@ -36,7 +56,7 @@ runs:
 
         echo 'APT::Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-acquire-retries
 
-        if [[ "${{ env.ACT }}" != "true" ]]; then
+        if [[ "$configure_mirror" == "true" ]]; then
           find_args=(
             --apply
             --verbose
