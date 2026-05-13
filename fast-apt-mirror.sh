@@ -69,7 +69,7 @@ fi
 #################################################
 readonly DESC_CURRENT='Prints the currently configured APT mirror.'
 readonly DESC_FIND="Finds and prints the URL of a fast APT mirror and optionally applies it using the '$(basename "$0") set' command."
-readonly DESC_SET="Configures the given APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) and runs 'sudo apt-get update'."
+readonly DESC_SET="Configures the given APT mirror in the sources file where it is defined and runs 'sudo apt-get update'."
 
 # workaround to prevent: "xargs: environment is too large for exec" in some environments
 function __xargs() {
@@ -500,20 +500,161 @@ function max_lines() {
   awk "NR<=$1"
 }
 
+function apt_suite_matches() {
+  local suite=$1 target_suite
+  shift
+  [[ $# -gt 0 ]] || return 0
+  for target_suite in "$@"; do
+    # APT suites may use pockets such as "noble-updates" next to "noble".
+    [[ $suite == "$target_suite" || $suite == "$target_suite-"* ]] && return 0
+  done
+  return 1
+}
+
+function get_dist_suite_names() {
+  local dist_name=$1 dist_version_name=$2
+  case $dist_name in
+    debian)
+      # Debian sources often use moving aliases instead of release codenames.
+      printf '%s\n' "$dist_version_name" stable testing unstable sid oldstable oldoldstable experimental
+      ;;
+    kali)
+      # kali-last-release images can advertise rolling while their APT source
+      # intentionally tracks the last released snapshot.
+      printf '%s\n' "$dist_version_name" kali-rolling kali-last-snapshot
+      ;;
+    *) printf '%s\n' "$dist_version_name" ;;
+  esac
+}
+
 function read_main_mirror_from_deb822_file() {
   # https://repolib.readthedocs.io/en/latest/deb822-format.html#deb822-style-format
   local file=$1
+  shift
   [[ -f $file ]] || return 0
-  local line mirror_uri='' mirror_main=''
-  while IFS= read -r line; do
-    if [[ -z $line ]]; then mirror_uri=; mirror_main=; continue; fi
-    if matches "$line" 'URIs:\s+([^ ]+)'; then mirror_uri=${BASH_REMATCH[1]}; continue; fi
-    if matches "$line" 'Components:\s+.*(main)(\s+|$)'; then mirror_main=true; continue; fi
-    if [[ -n $mirror_uri && "$mirror_main" == "true" ]]; then
-      echo "$mirror_uri"
-      return
+  local line field_name field_value apt_type component suite
+  local mirror_uri='' mirror_main='' mirror_suite='' mirror_type='' mirror_enabled='true'
+  [[ $# -eq 0 ]] && mirror_suite=true
+  # APT-generated .sources files keep these fields single-line; folded values are out of scope here.
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ -z $line ]]; then
+      # Deb822 stanzas can put Enabled/Types after URI, so decide only at stanza end.
+      if [[ -n $mirror_uri && "$mirror_enabled" == "true" && "$mirror_type" == "true" && "$mirror_main" == "true" && "$mirror_suite" == "true" ]]; then
+        echo "$mirror_uri"
+        return
+      fi
+      mirror_uri=; mirror_main=; mirror_suite=; mirror_type=; mirror_enabled='true'
+      [[ $# -eq 0 ]] && mirror_suite=true
+      continue
+    fi
+    field_name=${line%%:*}
+    field_value=${line#*:}
+    if [[ ${field_name,,} == "enabled" ]]; then
+      read -r field_value _ <<< "$field_value"
+      [[ ${field_value,,} == "no" ]] && mirror_enabled='false'
+    fi
+    if [[ ${field_name,,} == "types" ]]; then
+      # Match binary package sources only; deb-src cannot be configured as an APT mirror.
+      for apt_type in $field_value; do
+        if [[ $apt_type == "deb" ]]; then mirror_type=true; break; fi
+      done
+    fi
+    if [[ ${field_name,,} == "uris" ]]; then read -r mirror_uri _ <<< "$field_value"; fi
+    if [[ ${field_name,,} == "suites" ]]; then
+      for suite in $field_value; do
+        if apt_suite_matches "$suite" "$@"; then mirror_suite=true; break; fi
+      done
+    fi
+    if [[ ${field_name,,} == "components" ]]; then
+      for component in $field_value; do
+        if [[ $component == "main" ]]; then mirror_main=true; break; fi
+      done
     fi
   done < "$file"
+
+  # Handle a final stanza without a trailing blank line.
+  if [[ -n $mirror_uri && "$mirror_enabled" == "true" && "$mirror_type" == "true" && "$mirror_main" == "true" && "$mirror_suite" == "true" ]]; then
+    echo "$mirror_uri"
+  fi
+}
+
+function read_main_mirror_from_legacy_file() {
+  # https://manpages.debian.org/sources.list.5
+  local file=$1
+  shift
+  [[ -f $file ]] || return 0
+  local line uri suite uri_index i
+  local -a fields=()
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%$'\r'}
+    fields=()
+    read -r -a fields <<< "$line"
+    [[ ${#fields[@]} -gt 0 && ${fields[0]} == "deb" ]] || continue
+
+    uri_index=1
+    if [[ ${fields[$uri_index]:-} == "["* ]]; then
+      while [[ $uri_index -lt ${#fields[@]} ]]; do
+        case ${fields[$uri_index]} in
+          *"]") break ;;
+        esac
+        ((uri_index++))
+      done
+      ((uri_index++))
+    fi
+
+    uri=${fields[$uri_index]:-}
+    [[ $uri =~ ^(https?|ftp):// || $uri == mirror+file:* ]] || continue
+
+    suite=${fields[$((uri_index + 1))]:-}
+    apt_suite_matches "$suite" "$@" || continue
+
+    # Skip URI and suite, then scan components.
+    for ((i = uri_index + 2; i < ${#fields[@]}; i++)); do
+      if [[ ${fields[$i]} == "main" ]]; then
+        echo "$uri"
+        return
+      fi
+    done
+  done < "$file"
+}
+
+function read_main_mirror_from_apt_file() {
+  local file=$1
+  shift
+  case $file in
+    *.sources) read_main_mirror_from_deb822_file "$file" "$@" ;;
+    *.list) read_main_mirror_from_legacy_file "$file" "$@" ;;
+  esac
+}
+
+# Usage: read_main_mirror_from_apt_files [suite...] -- [cfgfile...]
+function read_main_mirror_from_apt_files() {
+  local target_suites=()
+  while [[ $# -gt 0 && $1 != "--" ]]; do
+    target_suites+=("$1")
+    shift
+  done
+  [[ ${1:-} == "--" ]] && shift
+
+  local cfgfile mirror_url mirror_file
+  for cfgfile in "$@"; do
+    # Literal unmatched globs from the caller are harmless and filtered here.
+    [[ -f $cfgfile ]] || continue
+    mirror_url=$(read_main_mirror_from_apt_file "$cfgfile" "${target_suites[@]}")
+
+    if [[ $mirror_url == "mirror+file:"* ]]; then
+      mirror_file=${mirror_url/mirror+file:/}
+      [[ -f $mirror_file ]] || continue
+      mirror_url=$(awk 'NR==1 { print $1 }' "$mirror_file")
+      cfgfile=$mirror_file
+    fi
+
+    if [[ -n $mirror_url ]]; then
+      echo "$mirror_url"
+      echo "$cfgfile"
+      return
+    fi
+  done
 }
 
 
@@ -533,34 +674,33 @@ function get_current_mirror() {
        ;;
   esac
 
-  local current_mirror_cfgfile
+  local current_mirror_cfgfile cfgfile
+  local dist_version_name=$(get_dist_version_name)
+  local dist_suite_names=()
+  readarray -t dist_suite_names < <(get_dist_suite_names "$dist_name" "$dist_version_name")
+  local current_mirror_cfgfiles=()
+  # Prefer distro-owned source files before the broad sources.list.d fallback.
   case $dist_name in
-    debian) current_mirror_cfgfile='/etc/apt/sources.list.d/debian.sources' ;;
-    kali)   current_mirror_cfgfile='/etc/apt/sources.list' ;;
+    debian) current_mirror_cfgfiles+=('/etc/apt/sources.list.d/debian.sources') ;;
+    kali)   current_mirror_cfgfiles+=('/etc/apt/sources.list') ;;
     ubuntu|pop)
         if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then # Ubuntu 24+
-          current_mirror_cfgfile='/etc/apt/sources.list.d/ubuntu.sources'
+          current_mirror_cfgfiles+=('/etc/apt/sources.list.d/ubuntu.sources')
         else
-          current_mirror_cfgfile='/etc/apt/sources.list.d/system.sources'
+          current_mirror_cfgfiles+=('/etc/apt/sources.list.d/system.sources')
         fi
       ;;
   esac
-  local current_mirror_url=$(read_main_mirror_from_deb822_file "$current_mirror_cfgfile")
 
-  if [[ -z $current_mirror_url ]]; then
-    if [[ -f /etc/apt/sources.list ]]; then
-       if grep -q -E "^deb\s+mirror\+file:/etc/apt/apt-mirrors.txt\s+.*\s+main" /etc/apt/sources.list; then
-         current_mirror_cfgfile=/etc/apt/apt-mirrors.txt
-         current_mirror_url=$(awk 'NR==1 { print $1 }' "$current_mirror_cfgfile")
-       else
-         current_mirror_cfgfile=/etc/apt/sources.list
-         current_mirror_url=$(grep -E "^deb\s+(https?|ftp)://.*\s+main" "$current_mirror_cfgfile" | awk 'NR==1 { print $2 }')
-       fi
-    fi
-  elif [[ $current_mirror_url == "mirror+file:"* ]]; then
-    current_mirror_cfgfile=${current_mirror_url/mirror+file:/}
-    current_mirror_url=$(awk 'NR==1 { print $1 }' "${current_mirror_url/mirror+file:/}")
-  fi
+  current_mirror_cfgfiles+=('/etc/apt/sources.list')
+  for cfgfile in /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+    current_mirror_cfgfiles+=("$cfgfile")
+  done
+
+  local current_mirror_info=()
+  readarray -t current_mirror_info < <(read_main_mirror_from_apt_files "${dist_suite_names[@]}" -- "${current_mirror_cfgfiles[@]}")
+  local current_mirror_url=${current_mirror_info[0]:-}
+  current_mirror_cfgfile=${current_mirror_info[1]:-}
 
   if [[ -z $current_mirror_url ]]; then
     >&2 echo "unknown"
@@ -602,7 +742,7 @@ function find_fast_mirror() {
         echo "$DESC_FIND"
         echo
         echo "Options:"
-        echo "     --apply             - Replaces the currently configured APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'"
+        echo "     --apply             - Replaces the current APT mirror in the sources file where it is defined and runs 'sudo apt-get update'"
         echo "     --country CODE      - The country code to use for selecting mirrors. NOTE: Only applies to Ubuntu based distros. Defaults to http://mirrors.ubuntu.com/mirrors.txt"
         echo "     --exclude-current   - If specified, don't include the currently configured APT mirror in the speed tests."
         echo "     --healthchecks N    - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20"
@@ -1004,6 +1144,10 @@ function set_mirror() {
 # main entry point
 #
 case ${1:-} in
+  __get_dist_suite_names) shift; get_dist_suite_names "$@" ;;
+  __read_main_mirror_from_deb822_file) shift; read_main_mirror_from_deb822_file "$@" ;;
+  __read_main_mirror_from_legacy_file) shift; read_main_mirror_from_legacy_file "$@" ;;
+  __read_main_mirror_from_apt_files) shift; read_main_mirror_from_apt_files "$@" ;;
   __probe_mirror)      shift; __probe_mirror "$@" ;;
   __speed_test_mirror) shift; __speed_test_mirror "$@" ;;
   find)    shift; find_fast_mirror "$@" ;;

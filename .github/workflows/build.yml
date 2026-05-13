@@ -162,6 +162,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        apt_source_layout:
+        - default
         image:
         - debian:unstable-slim
         - debian:testing-slim
@@ -181,6 +183,11 @@ jobs:
         - ubuntu:22.04
         - ubuntu:20.04
         - ubuntu:18.04
+        include:
+        # Reproduce CI images that keep Ubuntu repos in sources.list with
+        # bracketed options before the URL instead of ubuntu.sources.
+        - image: ubuntu:24.04
+          apt_source_layout: legacy-source-options
 
     steps:
     - name: Git checkout
@@ -193,9 +200,9 @@ jobs:
         git clone --depth=1 --single-branch https://github.com/bats-core/bats-support.git .bats/support
         git clone --depth=1 --single-branch https://github.com/bats-core/bats-assert.git .bats/assert
 
-    - name: Run tests in [${{ matrix.image }}]
+    - name: Run tests in [${{ matrix.image }}] with APT source layout [${{ matrix.apt_source_layout }}]
       timeout-minutes: 10
-      run: bash tests/run-tests-in-docker.sh ${{ matrix.image }}
+      run: FAST_APT_MIRROR_TEST_APT_SOURCE_LAYOUT=${{ matrix.apt_source_layout }} bash tests/run-tests-in-docker.sh ${{ matrix.image }}
 
 
   ###########################################################

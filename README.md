@@ -10,7 +10,7 @@
 
 1. [What is it?](#what-is-it)
 1. [Usage as GitHub Action](#github_action)
-1. [Usage on the commandline](#cli)
+1. [Usage on the command line](#cli)
    1. [Installation](#installation)
    1. [`current` command](#current-command)
    1. [`find` command](#find-command)
@@ -50,6 +50,8 @@ jobs:
         configure-mirror: auto # Whether to configure the APT mirror: auto, true, or false
 ```
 
+The Action defaults (`speedtests: 10`, `sample-size: 1024`) are more aggressive than the CLI defaults (`5`, `200`) because runner mirror selection benefits from a wider, longer probe.
+
 With `configure-mirror: auto`, mirror configuration is skipped for local Act runs, but still runs on Forgejo and Gitea Actions runners even when `ACT=true` is set.
 
 The action output will look like this:
@@ -77,6 +79,8 @@ Nothing to do, already using: http://azure.archive.ubuntu.com/ubuntu/
 
 ### <a name="installation"></a>Installation
 
+Requires Bash 4+ (uses associative-array and string-manipulation features unavailable in older shells). All supported distros (Debian, Ubuntu, Pop!_OS, Kali) ship Bash 4 or newer in their base images.
+
 For example:
 ```bash
 # install pre-reqs for HTTPS mirror coverage: curl and CA certificates for apt
@@ -101,7 +105,7 @@ Available commands:
 Determines the currently effective APT mirror.
 ```sh
 $ fast-apt-mirror.sh current
-Current mirror: http://artfiles.org/ubuntu
+Current mirror: http://artfiles.org/ubuntu (/etc/apt/sources.list.d/ubuntu.sources)
 ```
 
 Capture the current mirror URL in a variable:
@@ -122,7 +126,7 @@ Usage:
 fast-apt-mirror.sh find [OPTION]...
 
 Options:
-     --apply             - Replaces the current APT mirror in /etc/apt/(sources.list|sources.list.d/system.sources) with a fast mirror and runs 'sudo apt-get update'
+     --apply             - Replaces the current APT mirror in the sources file where it is defined and runs 'sudo apt-get update'
      --country CODE      - The country code to use for selecting mirrors. NOTE: Only applies to Ubuntu based distros. Defaults to http://mirrors.ubuntu.com/mirrors.txt
      --exclude-current   - If specified, don't include the current APT mirror in the speed tests.
      --healthchecks N    - Number of mirrors from the mirrors list to check for availability and up-to-dateness - default is 20
@@ -138,7 +142,7 @@ Finding a fast mirror:
 ```sh
 $ fast-apt-mirror.sh find
 
-Current mirror: http://artfiles.org/ubuntu/
+Current mirror: http://artfiles.org/ubuntu/ (/etc/apt/sources.list.d/ubuntu.sources)
 Randomly selecting 20 mirrors...done
 Checking sync status of 20 mirrors....................done
  -> 20 mirrors are reachable and up-to-date
@@ -157,13 +161,13 @@ Finding and activating a fast mirror:
 ```sh
 $ fast-apt-mirror.sh find --apply
 
-Current mirror: http://azure.archive.ubuntu.com/ubuntu/
+Current mirror: http://azure.archive.ubuntu.com/ubuntu/ (/etc/apt/sources.list)
 Randomly selecting 20 mirrors...done
 Checking sync status of 20 mirrors....................done
  -> 20 mirrors are reachable and up-to-date
 Speed testing 5 of the available 20 mirrors (sample download size: 200KB).....done
  -> https://ubuntu.mirror.shastacoe.net/ubuntu/ (2409 KB/s) determined as fastest mirror within 6 seconds
-Current mirror: http://azure.archive.ubuntu.com/ubuntu/
+Current mirror: http://azure.archive.ubuntu.com/ubuntu/ (/etc/apt/sources.list)
 Creating backup /etc/apt/sources.list.bak.20230207_211544
 Changing mirror from [http://azure.archive.ubuntu.com/ubuntu/] to [https://ubuntu.mirror.shastacoe.net/ubuntu/]...
 Hit:1 https://packages.microsoft.com/ubuntu/20.04/prod focal InRelease
@@ -175,7 +179,7 @@ Reading package lists... Done
 
 ### <a name="set-command"></a>The `set` sub command
 
-Finds and prints the URL of a fast APT mirror and optionally applies it using the `fast-apt-mirror.sh set` command.
+Configures the given APT mirror in the sources file where the current mirror is defined and runs `sudo apt-get update`.
 
 Usage:
 ```yml
@@ -189,11 +193,11 @@ Example:
 ```sh
 $ fast-apt-mirror.sh set https://mirrors.xtom.com/ubuntu/
 
-Current mirror: http://azure.archive.ubuntu.com/ubuntu/
+Current mirror: http://azure.archive.ubuntu.com/ubuntu/ (/etc/apt/sources.list)
 Creating backup /etc/apt/sources.list.bak.20230207_211544
 Changing mirror from [http://azure.archive.ubuntu.com/ubuntu/] to [https://mirrors.xtom.com/ubuntu/]...
 Hit:1 https://packages.microsoft.com/ubuntu/20.04/prod focal InRelease
-Get:2 https://ubuntu.mirror.shastacoe.net/ubuntu focal InRelease [265 kB]....
+Get:2 https://mirrors.xtom.com/ubuntu focal InRelease [265 kB]....
 ...
 Fetched 26.9 MB in 5s (4211 kB/s)
 Reading package lists... Done

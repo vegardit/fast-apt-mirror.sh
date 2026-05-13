@@ -87,6 +87,122 @@ function get_dist_name() {
   esac
 }
 
+@test "current: Parse Deb822 source when Components is the final field" {
+  source_file="${BATS_TEST_TMPDIR}/ubuntu.sources"
+  printf '%s\n' \
+    'Types: deb' \
+    'URIs: http://archive.ubuntu.com/ubuntu/' \
+    'Suites: noble noble-updates' \
+    'Components: main' \
+    > "$source_file"
+
+  assert_exitcode $RC_OK __read_main_mirror_from_deb822_file "$source_file"
+
+  assert_output 'http://archive.ubuntu.com/ubuntu/'
+}
+
+@test "current: Parse Deb822 source without trailing newline" {
+  source_file="${BATS_TEST_TMPDIR}/ubuntu.sources"
+  printf '%s\n' \
+    'Types: deb' \
+    'URIs: http://archive.ubuntu.com/ubuntu/' \
+    'Suites: noble noble-updates' \
+    > "$source_file"
+  printf '%s' 'Components: main' >> "$source_file"
+
+  assert_exitcode $RC_OK __read_main_mirror_from_deb822_file "$source_file"
+
+  assert_output 'http://archive.ubuntu.com/ubuntu/'
+}
+
+@test "current: Search Deb822 source files" {
+  third_party_file="${BATS_TEST_TMPDIR}/google-chrome.sources"
+  source_only_file="${BATS_TEST_TMPDIR}/source-only.sources"
+  disabled_file="${BATS_TEST_TMPDIR}/disabled.sources"
+  source_file="${BATS_TEST_TMPDIR}/custom.sources"
+  cat > "$third_party_file" <<'EOF'
+Types: deb
+URIs: https://dl.google.com/linux/chrome-stable/deb/
+Suites: stable
+Components: main
+EOF
+  cat > "$source_only_file" <<'EOF'
+Types: deb-src
+URIs: http://source-only.example/ubuntu/
+Suites: noble
+Components: main
+EOF
+  cat > "$disabled_file" <<'EOF'
+Enabled: no
+Types: deb
+URIs: http://disabled.example/ubuntu/
+Suites: noble
+Components: main
+EOF
+  cat > "$source_file" <<'EOF'
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: noble noble-updates
+Components: main
+EOF
+
+  assert_exitcode $RC_OK __read_main_mirror_from_apt_files noble -- "${BATS_TEST_TMPDIR}/missing.sources" "$third_party_file" "$source_only_file" "$disabled_file" "$source_file"
+
+  assert_line --index 0 'http://archive.ubuntu.com/ubuntu/'
+  assert_line --index 1 "$source_file"
+}
+
+@test "current: Parse Debian legacy source with suite alias" {
+  source_file="${BATS_TEST_TMPDIR}/sources.list"
+  cat > "$source_file" <<'EOF'
+deb http://deb.debian.org/debian stable main
+EOF
+
+  assert_exitcode $RC_OK __read_main_mirror_from_legacy_file "$source_file" bookworm stable testing unstable sid
+
+  assert_output 'http://deb.debian.org/debian'
+}
+
+@test "current: Parse Kali legacy source with last-snapshot alias" {
+  source_file="${BATS_TEST_TMPDIR}/sources.list"
+  cat > "$source_file" <<'EOF'
+deb http://http.kali.org/kali kali-last-snapshot main contrib non-free non-free-firmware
+EOF
+
+  assert_exitcode $RC_OK __get_dist_suite_names kali kali-rolling
+  suite_names=("${lines[@]}")
+  assert_exitcode $RC_OK __read_main_mirror_from_legacy_file "$source_file" "${suite_names[@]}"
+
+  assert_output 'http://http.kali.org/kali'
+}
+
+@test "current: Parse legacy source with options before URL" {
+  source_file="${BATS_TEST_TMPDIR}/sources.list"
+  cat > "$source_file" <<'EOF'
+deb [arch=amd64 signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://archive.ubuntu.com/ubuntu/ noble main restricted
+EOF
+
+  assert_exitcode $RC_OK __read_main_mirror_from_legacy_file "$source_file"
+
+  assert_output 'http://archive.ubuntu.com/ubuntu/'
+}
+
+@test "current: Resolve mirror+file legacy source" {
+  mirror_file="${BATS_TEST_TMPDIR}/apt-mirrors.txt"
+  source_file="${BATS_TEST_TMPDIR}/sources.list"
+  cat > "$mirror_file" <<'EOF'
+http://archive.ubuntu.com/ubuntu/
+EOF
+  cat > "$source_file" <<EOF
+deb mirror+file:$mirror_file noble main restricted
+EOF
+
+  assert_exitcode $RC_OK __read_main_mirror_from_apt_files noble -- "$source_file"
+
+  assert_line --index 0 'http://archive.ubuntu.com/ubuntu/'
+  assert_line --index 1 "$mirror_file"
+}
+
 
 ##############################
 # test find
@@ -138,13 +254,8 @@ EOF
 @test "find: Find mirror if executed with arguments" {
   assert_exitcode $RC_OK find --sample-size 10 --healthchecks 8 --ignore-sync-state --speedtests 2 --country DE
   assert_regex "$output" 'Randomly selecting 8 mirrors...done'
-  arch=$(dpkg --print-architecture 2>/dev/null || echo amd64)
-  if [[ $arch == arm64 || $arch == armhf ]]; then
-    # On Ubuntu ARM, depending on country, there currently may be fewer than 2 reachable ubuntu-ports mirrors.
-    assert_regex "$output" 'Speed testing [12] of the available'
-  else
-    assert_regex "$output" 'Speed testing 2 of the available'
-  fi
+  # --speedtests is an upper bound; distro mirror availability can leave only one candidate.
+  assert_regex "$output" 'Speed testing [12] of the available'
   assert_regex "$output" '(sample download size: 10KB)'
   assert_regex "$output" '=> (https?|ftp)://.* determined as fastest mirror'
   refute_regex "$output" 'ERROR:'
@@ -153,13 +264,8 @@ EOF
 @test "find: Find mirror with --ignore-sync-state only" {
   assert_exitcode $RC_OK find --ignore-sync-state --speedtests 2 --healthchecks 8 --country DE
   assert_regex "$output" 'Randomly selecting 8 mirrors...done'
-  arch=$(dpkg --print-architecture 2>/dev/null || echo amd64)
-  if [[ $arch == arm64 || $arch == armhf ]]; then
-    # On Ubuntu ARM, depending on country, there currently may be fewer than 2 reachable ubuntu-ports mirrors.
-    assert_regex "$output" 'Speed testing [12] of the available'
-  else
-    assert_regex "$output" 'Speed testing 2 of the available'
-  fi
+  # --speedtests is an upper bound; distro mirror availability can leave only one candidate.
+  assert_regex "$output" 'Speed testing [12] of the available'
   assert_regex "$output" '=> (https?|ftp)://.* determined as fastest mirror'
   refute_regex "$output" 'Fastest mirror detection returned invalid URL'
 }
