@@ -81,7 +81,7 @@ jobs:
 
 
     - name: Git Checkout
-      uses: actions/checkout@v6  # https://github.com/actions/checkout
+      uses: actions/checkout@v7  # https://github.com/actions/checkout
 
 
     - name: Run syntax check
@@ -191,7 +191,7 @@ jobs:
 
     steps:
     - name: Git checkout
-      uses: actions/checkout@v6  # https://github.com/actions/checkout
+      uses: actions/checkout@v7  # https://github.com/actions/checkout
 
     - name: Download bats
       run: |
