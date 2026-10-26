@@ -170,11 +170,9 @@ jobs:
         - ghcr.io/dockerhub-mirror/debian:stable-slim
         - ghcr.io/dockerhub-mirror/debian:bookworm-slim
         - ghcr.io/dockerhub-mirror/debian:trixie-slim
-        - debian:bullseye-slim
         - ghcr.io/dockerhub-mirror/bitnami__minideb:latest
         - ghcr.io/dockerhub-mirror/bitnami__minideb:trixie
         - ghcr.io/dockerhub-mirror/bitnami__minideb:bookworm
-        - bitnami/minideb:bullseye
         - kalilinux/kali-last-release:latest
         - python:3-slim
         - ubuntu:devel
@@ -237,8 +235,8 @@ jobs:
             steps.metadata.outputs.update-type == 'version-update:semver-minor'
           )
         }}
-      run: |
-        gh pr merge --auto --rebase "$PR_URL"
       env:
         PR_URL: ${{github.event.pull_request.html_url}}
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      run: |
+        gh pr merge --auto --rebase "$PR_URL"
